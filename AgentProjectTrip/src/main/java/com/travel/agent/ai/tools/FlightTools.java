@@ -47,7 +47,7 @@ public class FlightTools {
      * @param date        出发日期，严格遵循 ISO 8601 格式：YYYY-MM-DD，例如 "2026-05-20"
      * @return 匹配的航班列表，每条记录包含航司名称和单程价格（欧元）；若查询失败则返回空列表
      */
-    @Tool(description = "用于查询从出发地到目的地的航班机票信息。必须包含出发地三字码、目的地三字码和日期(YYYY-MM-DD)")
+    @Tool(description = "根据出发地和目的地的三字机场代码（IATA）及日期查询单程航班价格。注意：必须使用具体的物理机场代码（例如：飞往巴黎必须使用 'CDG' 或 'ORY'，绝对不要使用泛城市代码 'PAR'；伦敦使用 'LHR' 等）。日期格式必须为 YYYY-MM-DD。")
     public List<FlightDTO> searchFlights(String origin, String destination, String date) {
         return flightService.searchFlights(origin, destination, date);
     }

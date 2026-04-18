@@ -1,0 +1,30 @@
+package com.travel.agent.core.dto;
+
+import java.io.Serial;
+import java.io.Serializable;
+
+/**
+ * 景点数据传输对象（DTO 层 - 不可变值对象）
+ *
+ * <p>采用 Java 16+ {@code record} 结构定义，所有字段在构造时一次性赋值，
+ * 无 setter，天然线程安全，适合在多层之间传递只读数据。</p>
+ *
+ * <p>实现 {@link Serializable} 是 Redis 序列化的必要条件：Spring Cache 在将对象
+ * 写入 Redis 时需要对其进行序列化，反序列化时依赖 {@code serialVersionUID} 进行版本校验。</p>
+ *
+ * @param name        景点名称，来源于 SerpApi {@code local_results[].title} 字段
+ * @param rating      景点用户评分（满分 5 分），来源于 {@code local_results[].rating}；
+ *                    无评分数据时填 0.0
+ * @param description 景点简述或分类标签，来源于 {@code local_results[].type} 字段，
+ *                    例如 "博物馆"、"历史地标"；无数据时填 "暂无简介"
+ */
+public record AttractionDTO(
+        String name,
+        double rating,
+        String description
+) implements Serializable {
+
+    /** 序列化版本号，保证 Redis 中已缓存的对象在类结构未变更时可被正确反序列化 */
+    @Serial
+    private static final long serialVersionUID = 1L;
+}

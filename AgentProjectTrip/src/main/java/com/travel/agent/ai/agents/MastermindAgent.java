@@ -1,6 +1,8 @@
 package com.travel.agent.ai.agents;
 
 import com.travel.agent.ai.tools.FlightTools;
+import com.travel.agent.ai.tools.PlacesTools;
+import com.travel.agent.ai.tools.WeatherTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
@@ -14,8 +16,9 @@ import org.springframework.stereotype.Service;
  *   <li>持有并驱动 {@link ChatClient}，作为与大模型（阿里云百炼 DashScope）对话的唯一入口。</li>
  *   <li>通过 System Prompt 为大模型注入角色定义与实时上下文（当前日期），
  *       解决大模型的"时间幻觉"问题。</li>
- *   <li>将 {@link FlightTools} 注册为可调用工具，授权大模型在推理过程中自主
- *       决策何时触发真实的航班查询（Function Calling）。</li>
+ *   <li>将 {@link FlightTools}、{@link WeatherTools} 和 {@link PlacesTools} 注册为可调用工具，
+ *       授权大模型在推理过程中自主决策何时触发航班查询、天气查询、酒店搜索或景点搜索
+ *       （Function Calling）。</li>
  * </ul>
  * </p>
  */
@@ -24,6 +27,8 @@ public class MastermindAgent {
 
     private final ChatClient chatClient;
     private final FlightTools flightTools;
+    private final WeatherTools weatherTools;
+    private final PlacesTools placesTools;
 
     /**
      * 通过构造器注入 ChatClient 和工具集。
@@ -31,10 +36,15 @@ public class MastermindAgent {
      * @param builder      Spring AI 提供的 {@link ChatClient.Builder}，已由自动配置绑定到
      *                     application.properties 中的 DashScope 端点和模型参数。
      * @param flightTools  航班查询工具集，注册后大模型可在推理链中主动调用。
+     * @param weatherTools 天气查询工具集，注册后大模型可在推理链中主动调用。
+     * @param placesTools  酒店与景点查询工具集，注册后大模型可在推理链中主动调用。
      */
-    public MastermindAgent(ChatClient.Builder builder, FlightTools flightTools) {
+    public MastermindAgent(ChatClient.Builder builder, FlightTools flightTools,
+                           WeatherTools weatherTools, PlacesTools placesTools) {
         this.chatClient = builder.build();
         this.flightTools = flightTools;
+        this.weatherTools = weatherTools;
+        this.placesTools = placesTools;
     }
 
     /**
@@ -59,14 +69,18 @@ public class MastermindAgent {
         String currentDate = java.time.LocalDate.now().toString();
 
         return chatClient.prompt()
-                .system("你是一位极具极客范儿的欧洲旅行总指挥 Agent。你的任务是帮用户查机票并规划行程。" +
-                        "你必须自主思考何时调用 'searchFlights' 工具获取底层真实数据。" +
+                .system("你是一位极具极客范儿的欧洲旅行总指挥 Agent。你的任务是帮用户查机票、查天气、查酒店并规划完整行程。" +
+                        "你拥有以下四种工具，必须根据用户意图自主决策调用时机：" +
+                        "1. 'searchFlights'——查询航班机票；" +
+                        "2. 'getWeather'——查询目的地实时天气；" +
+                        "3. 'searchHotels'——查询酒店价格和评分（需要入住和退房日期）；" +
+                        "4. 'searchAttractions'——查询城市热门景点。" +
                         "拿到数据后，请用清晰、专业的自然语言向用户总结，不要直接丢出冷冰冰的 JSON。" +
                         // 动态拼接当前日期，强制大模型以真实日期为基准计算相对时间
                         " 当前现实世界的系统日期是：" + currentDate + "。你在规划行程和推算时间窗口时，必须严格基于这个当前日期进行计算！")
                 .user(userMessage)
-                // 注册工具集：大模型在推理中若判断需要查询航班，将自动回调 FlightTools.searchFlights()
-                .tools(flightTools)
+                // 同时注册全部四个工具集，大模型将根据用户意图自主决定调用哪个（或哪几个）工具
+                .tools(flightTools, weatherTools, placesTools)
                 .call()
                 .content();
     }
