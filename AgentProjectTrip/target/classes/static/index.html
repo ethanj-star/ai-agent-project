@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Europa Terminal</title>
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Marked.js：Markdown 解析器 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    /* ───────────────────────────────────────────────
+       全局滚动条隐藏（保留滚动功能）
+    ─────────────────────────────────────────────── */
+    * {
+      scrollbar-width: none;       /* Firefox */
+      -ms-overflow-style: none;    /* IE / Edge */
+    }
+    *::-webkit-scrollbar {
+      display: none;               /* Chrome / Safari */
+    }
+
+    /* ───────────────────────────────────────────────
+       顶部指示灯脉冲动画
+    ─────────────────────────────────────────────── */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px 2px #22c55e; }
+      50%       { opacity: 0.4; box-shadow: 0 0 2px 0px #22c55e; }
+    }
+    .pulse-dot {
+      animation: pulse-dot 1.6s ease-in-out infinite;
+    }
+
+    /* ───────────────────────────────────────────────
+       Loading 三点跳动动画
+    ─────────────────────────────────────────────── */
+    @keyframes bounce-dot {
+      0%, 80%, 100% { transform: translateY(0); }
+      40%           { transform: translateY(-6px); }
+    }
+    .bounce-dot:nth-child(1) { animation: bounce-dot 1s ease-in-out infinite 0s;    }
+    .bounce-dot:nth-child(2) { animation: bounce-dot 1s ease-in-out infinite 0.15s; }
+    .bounce-dot:nth-child(3) { animation: bounce-dot 1s ease-in-out infinite 0.3s;  }
+
+    /* ───────────────────────────────────────────────
+       AI 回复气泡内的 Markdown 样式美化
+    ─────────────────────────────────────────────── */
+
+    /* 段落间距 */
+    .ai-markdown p {
+      margin-bottom: 0.6em;
+      line-height: 1.7;
+    }
+
+    /* 加粗：亮蓝高亮 */
+    .ai-markdown strong {
+      color: #93c5fd;   /* blue-300 */
+      font-weight: 700;
+    }
+
+    /* 斜体 */
+    .ai-markdown em {
+      color: #c4b5fd;   /* violet-300 */
+    }
+
+    /* 行内代码 */
+    .ai-markdown code {
+      background: #1e293b;   /* slate-800 */
+      color: #34d399;         /* emerald-400 */
+      padding: 0.15em 0.45em;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+      font-size: 0.85em;
+    }
+
+    /* 代码块 */
+    .ai-markdown pre {
+      background: #0f172a;   /* slate-900 */
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 1em;
+      overflow-x: auto;
+      margin: 0.75em 0;
+    }
+    .ai-markdown pre code {
+      background: transparent;
+      color: #7dd3fc;   /* sky-300 */
+      padding: 0;
+      font-size: 0.82em;
+    }
+
+    /* 表格 */
+    .ai-markdown table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.75em 0;
+      font-size: 0.88em;
+    }
+    .ai-markdown th {
+      background: #1e3a5f;
+      color: #bfdbfe;   /* blue-200 */
+      padding: 0.5em 0.75em;
+      border: 1px solid #334155;
+      text-align: left;
+    }
+    .ai-markdown td {
+      padding: 0.45em 0.75em;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+    }
+    .ai-markdown tr:nth-child(even) td {
+      background: #1e293b;
+    }
+
+    /* 无序/有序列表 */
+    .ai-markdown ul {
+      list-style: disc;
+      padding-left: 1.4em;
+      margin: 0.4em 0;
+    }
+    .ai-markdown ol {
+      list-style: decimal;
+      padding-left: 1.4em;
+      margin: 0.4em 0;
+    }
+    .ai-markdown li {
+      margin-bottom: 0.3em;
+      color: #cbd5e1;
+    }
+
+    /* 引用块 */
+    .ai-markdown blockquote {
+      border-left: 3px solid #6366f1;   /* indigo-500 */
+      padding: 0.4em 1em;
+      margin: 0.6em 0;
+      background: #1e1b4b33;
+      color: #a5b4fc;
+      border-radius: 0 6px 6px 0;
+    }
+
+    /* 标题层级 */
+    .ai-markdown h1 { font-size: 1.3em; font-weight: 700; color: #e2e8f0; margin: 0.6em 0 0.3em; }
+    .ai-markdown h2 { font-size: 1.15em; font-weight: 700; color: #e2e8f0; margin: 0.6em 0 0.3em; }
+    .ai-markdown h3 { font-size: 1.05em; font-weight: 600; color: #cbd5e1; margin: 0.5em 0 0.25em; }
+
+    /* 分割线 */
+    .ai-markdown hr {
+      border: none;
+      border-top: 1px solid #334155;
+      margin: 0.8em 0;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-300 flex flex-col h-screen overflow-hidden font-mono">
+
+  <!-- ═══════════════════════════════════════════
+       顶部 Header
+  ═══════════════════════════════════════════ -->
+  <header class="flex-shrink-0 flex items-center justify-between px-6 py-3
+                 border-b border-slate-800 bg-slate-950/90 backdrop-blur-sm z-10">
+    <div class="flex items-center gap-3">
+      <!-- 脉冲指示灯 -->
+      <span class="w-2.5 h-2.5 rounded-full bg-green-500 pulse-dot inline-block"></span>
+      <h1 class="text-base font-bold tracking-widest text-slate-100 uppercase">
+        Europa Terminal
+      </h1>
+      <span class="text-xs text-slate-500 tracking-wider">v1.0.0-MVP</span>
+    </div>
+    <!-- 右侧装饰性标签 -->
+    <div class="text-xs text-slate-600 tracking-widest hidden sm:block">
+      AGENT · ONLINE · READY
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════
+       中央聊天区
+  ═══════════════════════════════════════════ -->
+  <main id="chat-container"
+        class="flex-1 overflow-y-auto px-4 py-6 space-y-5">
+
+    <!-- 欢迎消息（静态初始气泡） -->
+    <div class="flex items-start gap-3 max-w-3xl">
+      <!-- AI 化身 -->
+      <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-700 flex items-center
+                  justify-center text-xs font-bold text-indigo-200 border border-indigo-500">
+        AI
+      </div>
+      <!-- AI 气泡 -->
+      <div class="bg-slate-800/70 border border-slate-700 rounded-2xl rounded-tl-sm
+                  px-4 py-3 text-sm text-slate-300 max-w-xl shadow-md">
+        <p class="text-indigo-300 font-semibold mb-1 text-xs tracking-widest uppercase">
+          System Boot
+        </p>
+        <p>
+          欢迎使用 <strong class="text-blue-300">Europa Terminal</strong>。
+          我是你的欧洲旅行 AI 总指挥，可以帮你查机票、查天气、找酒店和推荐景点。
+        </p>
+        <p class="mt-1 text-slate-400 text-xs">
+          试着问我："帮我查下明天从都柏林飞巴黎的机票" 或 "巴黎现在天气怎么样？"
+        </p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════
+       底部输入区（固定在底部）
+  ═══════════════════════════════════════════ -->
+  <footer class="flex-shrink-0 border-t border-slate-800 bg-slate-950/95 backdrop-blur-sm px-4 py-3">
+    <div class="flex items-center gap-3 max-w-4xl mx-auto">
+
+      <!-- 输入框 -->
+      <input
+        id="user-input"
+        type="text"
+        placeholder="输入指令，按 Enter 发送..."
+        autocomplete="off"
+        class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5
+               text-sm text-slate-100 placeholder-slate-500 outline-none
+               focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50
+               transition-all duration-200"
+      />
+
+      <!-- 发送按钮 -->
+      <button
+        id="send-btn"
+        class="flex-shrink-0 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700
+               disabled:text-slate-500 disabled:cursor-not-allowed
+               text-white text-sm font-semibold px-5 py-2.5 rounded-xl
+               transition-all duration-200 tracking-wide whitespace-nowrap"
+      >
+        发 送
+      </button>
+
+    </div>
+    <!-- 底部状态栏装饰 -->
+    <p class="text-center text-slate-700 text-xs mt-2 tracking-widest">
+      POWERED BY QWEN · SERPAPI · OPENWEATHERMAP
+    </p>
+  </footer>
+
+
+  <!-- ═══════════════════════════════════════════
+       核心交互 JavaScript
+  ═══════════════════════════════════════════ -->
+  <script>
+    // ── DOM 引用 ──────────────────────────────────
+    const chatContainer = document.getElementById('chat-container');
+    const userInput     = document.getElementById('user-input');
+    const sendBtn       = document.getElementById('send-btn');
+
+    // ── Marked.js 安全配置 ────────────────────────
+    marked.setOptions({
+      breaks: true,    // 单个换行符转为 <br>
+      gfm: true,       // 启用 GitHub Flavored Markdown（表格等）
+    });
+
+    // ─────────────────────────────────────────────
+    // 工具函数：将聊天区平滑滚动到最底部
+    // ─────────────────────────────────────────────
+    function scrollToBottom() {
+      chatContainer.scrollTo({
+        top: chatContainer.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+
+    // ─────────────────────────────────────────────
+    // 渲染【用户气泡】（右对齐，绿色系）
+    // ─────────────────────────────────────────────
+    function appendUserBubble(text) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-start gap-3 justify-end max-w-3xl ml-auto';
+
+      wrapper.innerHTML = `
+        <!-- 用户气泡文本 -->
+        <div class="bg-emerald-700/60 border border-emerald-600/50 rounded-2xl rounded-tr-sm
+                    px-4 py-2.5 text-sm text-emerald-100 max-w-sm shadow-md break-words">
+          ${escapeHtml(text)}
+        </div>
+        <!-- 用户化身 -->
+        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-700 flex items-center
+                    justify-center text-xs font-bold text-emerald-200 border border-emerald-500">
+          ME
+        </div>
+      `;
+
+      chatContainer.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    // ─────────────────────────────────────────────
+    // 渲染【Loading 气泡】（三个跳动小圆点）
+    // 返回该节点，方便后续移除
+    // ─────────────────────────────────────────────
+    function appendLoadingBubble() {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-start gap-3 max-w-3xl';
+      wrapper.id = 'loading-bubble';
+
+      wrapper.innerHTML = `
+        <!-- AI 化身 -->
+        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-700 flex items-center
+                    justify-center text-xs font-bold text-indigo-200 border border-indigo-500">
+          AI
+        </div>
+        <!-- 跳动圆点容器 -->
+        <div class="bg-slate-800/70 border border-slate-700 rounded-2xl rounded-tl-sm
+                    px-5 py-4 shadow-md flex items-center gap-1.5">
+          <span class="bounce-dot w-2 h-2 rounded-full bg-indigo-400 inline-block"></span>
+          <span class="bounce-dot w-2 h-2 rounded-full bg-indigo-400 inline-block"></span>
+          <span class="bounce-dot w-2 h-2 rounded-full bg-indigo-400 inline-block"></span>
+        </div>
+      `;
+
+      chatContainer.appendChild(wrapper);
+      scrollToBottom();
+      return wrapper;
+    }
+
+    // ─────────────────────────────────────────────
+    // 渲染【AI 回复气泡】（左对齐，蓝紫系 + Markdown）
+    // ─────────────────────────────────────────────
+    function appendAiBubble(markdownText) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-start gap-3 max-w-3xl';
+
+      // 用 marked.parse 将 Markdown 转为 HTML，并套上自定义样式类
+      const htmlContent = marked.parse(markdownText);
+
+      wrapper.innerHTML = `
+        <!-- AI 化身 -->
+        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-700 flex items-center
+                    justify-center text-xs font-bold text-indigo-200 border border-indigo-500">
+          AI
+        </div>
+        <!-- AI 气泡（ai-markdown 类承载所有 Markdown 自定义样式） -->
+        <div class="bg-slate-800/70 border border-slate-700 rounded-2xl rounded-tl-sm
+                    px-4 py-3 text-sm text-slate-300 max-w-2xl shadow-md ai-markdown">
+          ${htmlContent}
+        </div>
+      `;
+
+      chatContainer.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    // ─────────────────────────────────────────────
+    // 渲染【错误气泡】（红色警告）
+    // ─────────────────────────────────────────────
+    function appendErrorBubble(message) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-start gap-3 max-w-3xl';
+
+      wrapper.innerHTML = `
+        <div class="flex-shrink-0 w-8 h-8 rounded-full bg-red-900 flex items-center
+                    justify-center text-xs font-bold text-red-300 border border-red-700">
+          !!
+        </div>
+        <div class="bg-red-950/60 border border-red-800/60 rounded-2xl rounded-tl-sm
+                    px-4 py-3 text-sm text-red-300 max-w-xl shadow-md">
+          <p class="font-semibold mb-1 text-red-400 text-xs tracking-widest uppercase">
+            ⚠ Request Failed
+          </p>
+          <p>${escapeHtml(message)}</p>
+        </div>
+      `;
+
+      chatContainer.appendChild(wrapper);
+      scrollToBottom();
+    }
+
+    // ─────────────────────────────────────────────
+    // 工具函数：HTML 转义，防止 XSS
+    // ─────────────────────────────────────────────
+    function escapeHtml(text) {
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // ─────────────────────────────────────────────
+    // 核心：锁定 / 解锁 UI 状态
+    // ─────────────────────────────────────────────
+    function setLoading(isLoading) {
+      userInput.disabled = isLoading;
+      sendBtn.disabled   = isLoading;
+      sendBtn.textContent = isLoading ? '执行中...' : '发 送';
+    }
+
+    // ─────────────────────────────────────────────
+    // 核心：发送消息主流程
+    // ─────────────────────────────────────────────
+    async function sendMessage() {
+      const text = userInput.value.trim();
+      if (!text) return;
+
+      // 1. 立刻渲染用户气泡，清空输入框
+      appendUserBubble(text);
+      userInput.value = '';
+
+      // 2. 锁定 UI，显示 Loading 气泡
+      setLoading(true);
+      const loadingBubble = appendLoadingBubble();
+
+      try {
+        // 3. 调用后端 AI Agent 接口（encodeURIComponent 对特殊字符做 URL 编码）
+        const response = await fetch(
+          `/api/v1/travel/chat?message=${encodeURIComponent(text)}`
+        );
+
+        // 4. 移除 Loading 气泡
+        loadingBubble.remove();
+
+        if (!response.ok) {
+          // HTTP 错误（4xx / 5xx）
+          throw new Error(`服务端返回错误：HTTP ${response.status}`);
+        }
+
+        // 5. 读取响应文本，用 Markdown 渲染 AI 气泡
+        const replyText = await response.text();
+        appendAiBubble(replyText || '*(AI 返回了空响应)*');
+
+      } catch (err) {
+        // 网络故障或上面抛出的 HTTP 错误，统一渲染红色错误气泡
+        loadingBubble.remove();
+        appendErrorBubble(err.message || '网络请求失败，请检查服务是否启动。');
+      } finally {
+        // 6. 无论成功还是失败，都要解锁 UI 并让输入框重新获得焦点
+        setLoading(false);
+        userInput.focus();
+      }
+    }
+
+    // ─────────────────────────────────────────────
+    // 事件绑定
+    // ─────────────────────────────────────────────
+
+    // 点击发送按钮
+    sendBtn.addEventListener('click', sendMessage);
+
+    // 回车键触发（Shift+Enter 不触发，保留换行语义）
+    userInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // 页面加载完成后自动聚焦输入框
+    window.addEventListener('load', () => userInput.focus());
+  </script>
+
+</body>
+</html>
