@@ -1,6 +1,7 @@
 package com.travel.agent.ai.agents;
 
 import com.travel.agent.ai.tools.FlightTools;
+import com.travel.agent.ai.tools.KnowledgeTools;
 import com.travel.agent.ai.tools.PlacesTools;
 import com.travel.agent.ai.tools.WeatherTools;
 import org.springframework.ai.chat.client.ChatClient;
@@ -29,6 +30,7 @@ public class MastermindAgent {
     private final FlightTools flightTools;
     private final WeatherTools weatherTools;
     private final PlacesTools placesTools;
+    private final KnowledgeTools knowledgeTools;
 
     /**
      * 通过构造器注入 ChatClient 和工具集。
@@ -37,14 +39,17 @@ public class MastermindAgent {
      *                     application.properties 中的 DashScope 端点和模型参数。
      * @param flightTools  航班查询工具集，注册后大模型可在推理链中主动调用。
      * @param weatherTools 天气查询工具集，注册后大模型可在推理链中主动调用。
-     * @param placesTools  酒店与景点查询工具集，注册后大模型可在推理链中主动调用。
+     * @param placesTools     酒店与景点查询工具集，注册后大模型可在推理链中主动调用。
+     * @param knowledgeTools  私有知识库检索工具集，注册后大模型可通过 RAG 检索旅游攻略。
      */
     public MastermindAgent(ChatClient.Builder builder, FlightTools flightTools,
-                           WeatherTools weatherTools, PlacesTools placesTools) {
+                           WeatherTools weatherTools, PlacesTools placesTools,
+                           KnowledgeTools knowledgeTools) {
         this.chatClient = builder.build();
         this.flightTools = flightTools;
         this.weatherTools = weatherTools;
         this.placesTools = placesTools;
+        this.knowledgeTools = knowledgeTools;
     }
 
     /**
@@ -69,18 +74,19 @@ public class MastermindAgent {
         String currentDate = java.time.LocalDate.now().toString();
 
         return chatClient.prompt()
-                .system("你是一位极具极客范儿的欧洲旅行总指挥 Agent。你的任务是帮用户查机票、查天气、查酒店并规划完整行程。" +
-                        "你拥有以下四种工具，必须根据用户意图自主决策调用时机：" +
+                .system("你是一位经验丰富、严谨高效的欧洲旅行高级规划专家（Agent），你的任务是帮用户查机票、查天气、查酒店并规划完整行程。" +
+                        "你拥有以下五种工具，必须根据用户意图自主决策调用时机：" +
                         "1. 'searchFlights'——查询航班机票；" +
                         "2. 'getWeather'——查询目的地实时天气；" +
                         "3. 'searchHotels'——查询酒店价格和评分（需要入住和退房日期）；" +
-                        "4. 'searchAttractions'——查询城市热门景点。" +
+                        "4. 'searchAttractions'——查询城市热门景点；" +
+                        "5. 'searchTravelGuide'——从私有知识库检索目的地攻略、防坑指南、交通建议等经验性内容。" +
                         "拿到数据后，请用清晰、专业的自然语言向用户总结，不要直接丢出冷冰冰的 JSON。" +
                         // 动态拼接当前日期，强制大模型以真实日期为基准计算相对时间
                         " 当前现实世界的系统日期是：" + currentDate + "。你在规划行程和推算时间窗口时，必须严格基于这个当前日期进行计算！")
                 .user(userMessage)
-                // 同时注册全部四个工具集，大模型将根据用户意图自主决定调用哪个（或哪几个）工具
-                .tools(flightTools, weatherTools, placesTools)
+                // 同时注册全部五个工具集，大模型将根据用户意图自主决定调用哪个（或哪几个）工具
+                .tools(flightTools, weatherTools, placesTools, knowledgeTools)
                 .call()
                 .content();
     }
