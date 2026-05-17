@@ -1,0 +1,144 @@
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":"12","core_style":"经典黄金三角"}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢浮宫","suggested_duration":null,"booking_rules":null,"highlights":"顶楼天台拍埃菲尔铁塔绝了"}
+{"type":"POI","country":"法国","city":"尼斯","name":"尼斯海滩","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"瑞士","city":"琉森","name":"琉森湖","suggested_duration":null,"booking_rules":null,"highlights":"雪山倒影如油画"}
+{"type":"POI","country":"瑞士","city":null,"name":"少女峰","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"罗马","name":"斗兽场","suggested_duration":null,"booking_rules":null,"highlights":"清晨拍空镜"}
+{"type":"POI","country":"意大利","city":"威尼斯","name":"威尼斯贡多拉","suggested_duration":null,"booking_rules":null,"highlights":"黄昏体验"}
+{"type":"TIP","country":null,"city":null,"content":"高铁衔接，必乘冰川快车"}
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":9,"core_style":"特种兵"}
+{"type":"POI","country":"法国","city":"巴黎","name":"埃菲尔铁塔","suggested_duration":null,"booking_rules":null,"highlights":"夜游时遇上海洋峰会限定蓝绿渐变色灯光；地铁偶遇铁塔景观专线"}
+{"type":"POI","country":"法国","city":"巴黎","name":"凡尔赛宫","suggested_duration":null,"booking_rules":"通票可用","highlights":"除通票覆盖外，其余主要景点均前往"}
+{"type":"POI","country":"瑞士","city":"采尔马特","name":"马特洪峰","suggested_duration":null,"booking_rules":null,"highlights":"晴天偶遇，乘黄金列车沿途观景至近前，震撼落泪"}
+{"type":"POI","country":"瑞士","city":"卢塞恩","name":"卢塞恩湖游船","suggested_duration":null,"booking_rules":null,"highlights":"瑞吉山索道因风关闭后，在湖上乘船放松"}
+{"type":"POI","country":"瑞士","city":"格林德瓦","name":"梦幻山坡景观房","suggested_duration":"1晚","booking_rules":"含早餐，价格2000元","highlights":"阳台直面山坡景观"}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢浮宫","suggested_duration":null,"booking_rules":null,"highlights":"步行5分钟可达"}
+{"type":"POI","country":"意大利","city":"罗马","name":"西班牙广场","suggested_duration":null,"booking_rules":null,"highlights":"步行5分钟可达住宿酒店"}
+{"type":"POI","country":"意大利","city":"罗马","name":"LV专卖店","suggested_duration":null,"booking_rules":null,"highlights":"价格比国内便宜很多"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"市区内近距离景点建议步行；远距离可选地铁或Uber；曾意外坐上铁塔景观专线"}
+{"type":"TIP","country":"瑞士","city":null,"content":"强烈推荐提前购买瑞士通票（2日113瑞郎），灵活应对天气变化；黄金列车（尤其采尔马特线）全景天窗体验极佳"}
+{"type":"TIP","country":"瑞士","city":"瑞吉山","content":"风大可能导致索道临时关闭，需备选方案"}
+{"type":"TIP","country":"意大利","city":null,"content":"境内火车建议全程一等座或舒适二等座；提前购票价格差异小且更安全；车上提供食物和水适合赶行程"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"住宿优选1区中心位置、安全、房间宽敞（需容纳3个28寸行李箱）；民宿无早但位置极佳"}
+{"type":"TIP","country":"意大利","city":"米兰","content":"住宿选择包早酒店，性价比高（1晚1100元）"}
+{"type":"TIP","country":"意大利","city":"罗马","content":"半自助酒店无早，3晚2700元，步行5分钟至西班牙广场"}
+{"type":"ROUTE","countries":["瑞士","法国","意大利"],"total_days":null,"core_style":null}
+{"type":"TIP","country":"瑞士","city":null,"content":"需单独准备瑞士专用转换头（欧盟标准不统一）"}
+{"type":"TIP","country":"瑞士","city":null,"content":"流量卡需包含瑞士境内使用"}
+{"type":"TIP","country":"瑞士","city":null,"content":"需准备瑞士法郎现金"}
+{"type":"TIP","country":"瑞士","city":null,"content":"建议携带防盗链锁、手机链、贴身钱包（用于存放护照、银行卡和大部分现金）"}
+{"type":"ROUTE","countries":["法国"],"total_days":null,"core_style":"自由行"}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢浮宫","suggested_duration":"5小时","booking_rules":"需提前在官网预约时间；巴黎博物馆通票亦需预约；建议提前2个月预约","highlights":"参观镇馆三件套，建议提前观看解说视频"}
+{"type":"POI","country":"法国","city":"巴黎","name":"巴黎歌剧院","suggested_duration":"2小时","booking_rules":"现场购票15欧；通票不包含；需查询官网当日开放时间","highlights":"歌剧魅影包厢是必看亮点；排队购票处下午暴晒，需防晒"}
+{"type":"POI","country":"法国","city":"巴黎","name":"Café du Cadran","suggested_duration":null,"booking_rules":"The Fork预约享5折","highlights":"无空调但价格亲民；18:00后客流少；3人晚餐约50欧"}
+{"type":"POI","country":"法国","city":"巴黎","name":"Hôtel Coypel by Magna Arbor","suggested_duration":null,"booking_rules":null,"highlights":"寄存行李方便（带锁寄存室）；提供冰水、吹风机、三合一洗护、冰箱；无牙刷；每日客房打扫"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"塞纳河游船50RMB不要提前在平台购买，务必先到码头确认可以上船再购票，否则坐不上不退票"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"卢浮宫需提前预约入场时间，即使持有巴黎博物馆通票也必须预约，建议提前2个月操作"}
+{"type":"TIP","country":"瑞士","city":null,"content":"瑞士物价高，建议在巴黎采购物资"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"家乐福早餐推荐：1欧三明治、2欧法棍三明治、酸奶（需自备勺子）"}
+{"type":"ROUTE","countries":["法国","意大利","瑞士"],"total_days":null,"core_style":"自由行"}
+{"type":"POI","country":"法国","city":"巴黎","name":"塞纳河","suggested_duration":null,"booking_rules":null,"highlights":"清晨沿河散步，偶遇晨跑人群；适合搭配路边咖啡与可颂早餐"}
+{"type":"POI","country":"瑞士","city":"采尔马特","name":"采尔马特上山交通（缆车和火车）","suggested_duration":null,"booking_rules":"持Swiss Pass可享半价","highlights":"需结合Swiss Pass使用，性价比高；未持通票则需单独购票或比较单次/半价票"}
+{"type":"POI","country":"瑞士","city":"卢塞恩","name":"卢塞恩游船","suggested_duration":null,"booking_rules":"含在Swiss Pass内","highlights":"Swiss Pass覆盖，无需额外购票"}
+{"type":"POI","country":"瑞士","city":"瑞吉山","name":"瑞吉山火车","suggested_duration":null,"booking_rules":"含在Swiss Pass内","highlights":"Swiss Pass覆盖，便捷直达山顶观景"}
+{"type":"POI","country":"瑞士","city":"施皮茨","name":"施皮茨到因特拉肯游船","suggested_duration":null,"booking_rules":"含在Swiss Pass内","highlights":"Swiss Pass覆盖，湖光山色经典航线"}
+{"type":"POI","country":"意大利","city":"米兰","name":"米兰中央车站","suggested_duration":null,"booking_rules":"Trenitalia车次需提前check-in；可改签但一等座可能售罄","highlights":"多国铁路换乘枢纽；注意电子屏实时站台信息，纸质时刻表不准确；站内设tax free"}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"佛罗伦萨市内交通","suggested_duration":null,"booking_rules":"推荐Uber Black（一口价，车型为奔驰/宝马/特斯拉）","highlights":"比普通出租车贵几欧但服务更优，司机热情，无绕路风险"}
+{"type":"POI","country":"意大利","city":"罗马","name":"罗马市内交通","suggested_duration":null,"booking_rules":"推荐Uber Black（一口价，车型为奔驰/宝马/特斯拉）","highlights":"暴走热门城市，Uber Black提供可靠、舒适短途接驳"}
+{"type":"TIP","country":"法国","city":null,"content":"法国境内跨国出行推荐欧铁（SNCF），车站免安检，提前半小时抵达即可；一等座可选二楼，更安静，建议提前选靠近行李架座位"}
+{"type":"TIP","country":"瑞士","city":null,"content":"Swiss Pass适用于瑞士境内绝大多数公共交通（含游船、登山火车、缆车等），短期行程需对比单次票与半价票性价比；务必注意二等座持票者不可进入1 Class车厢，查票严格"}
+{"type":"TIP","country":"瑞士","city":"因特拉肯","content":"同站台不同车厢可能开往不同目的地，需仔细核对车厢外电子屏信息"}
+{"type":"TIP","country":"意大利","city":null,"content":"Italo私铁Economy票价不可退，Flex票价可改签；提供免费饮料与小零食；25寸行李箱可放头顶行李架"}
+{"type":"TIP","country":"意大利","city":"多莫多索拉","content":"跨国换乘枢纽，延误可能导致临时变更站台；休息室位于一站台后方；建议紧盯电子屏而非纸质时刻表"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"市内推荐步行+ Bolt打车组合；Bolt为一口价、提前付费，费用约十几欧元"}
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":15,"core_style":"自由行"}
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":"21","core_style":"city walk"}
+{"type":"TIP","country":"瑞士","city":null,"content":"多带些食物，物价高"}
+{"type":"TIP","country":null,"city":null,"content":"车票和瑞士交通票建议提前预订以节省费用"}
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":null,"core_style":"自由行"}
+{"type":"POI","country":"法国","city":"巴黎","name":"Citadines les Halles Paris","suggested_duration":null,"booking_rules":"6晚，10402元+税846元","highlights":null}
+{"type":"POI","country":"瑞士","city":"苏黎世","name":"Ruby Mimi Hotel Zurich","suggested_duration":null,"booking_rules":"1晚，1736元","highlights":null}
+{"type":"POI","country":"瑞士","city":"因特拉肯","name":"Grand Beau-Rivage","suggested_duration":null,"booking_rules":"3晚，8677元+税185元","highlights":null}
+{"type":"POI","country":"意大利","city":"米兰","name":"Starhotels Anderson","suggested_duration":null,"booking_rules":"1晚，1557元+税116元","highlights":null}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"Grand Hotel Baglioni","suggested_duration":null,"booking_rules":"1晚，2537元+税116元","highlights":null}
+{"type":"POI","country":"意大利","city":"罗马","name":"Hotel Piazza di Spagna","suggested_duration":null,"booking_rules":"2晚，4382元+税198元","highlights":null}
+{"type":"POI","country":"法国","city":"巴黎","name":"L'Oiseau Blanc","suggested_duration":null,"booking_rules":"2317元","highlights":"摩登家庭粉丝情怀打卡，不推荐"}
+{"type":"POI","country":"法国","city":"巴黎","name":"巴黎迪士尼","suggested_duration":null,"booking_rules":"4782元（含优速通）","highlights":"奢侈，可不去"}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢浮宫","suggested_duration":null,"booking_rules":"465元（含导览）","highlights":null}
+{"type":"POI","country":"法国","city":"巴黎","name":"奥赛博物馆","suggested_duration":null,"booking_rules":"198元（语音导览+100元）","highlights":"不推荐买语音导览"}
+{"type":"POI","country":"法国","city":"巴黎","name":"巴黎歌剧院","suggested_duration":null,"booking_rules":"251元","highlights":null}
+{"type":"POI","country":"法国","city":"巴黎","name":"塞纳河游船","suggested_duration":null,"booking_rules":"91元","highlights":null}
+{"type":"POI","country":"瑞士","city":"因特拉肯","name":"First山","suggested_duration":null,"booking_rules":"1713元（含2项目+无限缆车）+自行车371元","highlights":null}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"乌菲兹美术馆","suggested_duration":null,"booking_rules":"417元","highlights":null}
+{"type":"POI","country":"意大利","city":"罗马","name":"斗兽场","suggested_duration":null,"booking_rules":"600元（顶层票）","highlights":null}
+{"type":"TIP","country":"法国","city":"巴黎","content":"L'Oiseau Blanc为摩登家庭粉丝情怀打卡，没必要去"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"巴黎迪士尼+优速通花费奢侈，可以不去"}
+{"type":"TIP","country":"法国","city":"巴黎","content":"奥塞博物馆语音导览+100元，不推荐买"}
+{"type":"TIP","country":"瑞士","city":"卢塞恩","content":"瑞吉山泡面价格昂贵"}
+{"type":"ROUTE","countries":["法国","意大利","瑞士"],"total_days":null,"core_style":"深度慢逛"}
+{"type":"POI","country":"意大利","city":"罗马","name":"罗马斗兽场","suggested_duration":null,"booking_rules":null,"highlights":"外观拍照"}
+{"type":"POI","country":"瑞士","city":"卢塞恩","name":"卢塞恩湖","suggested_duration":null,"booking_rules":null,"highlights":"坐船吹风"}
+{"type":"POI","country":"法国","city":"巴黎","name":"埃菲尔铁塔","suggested_duration":null,"booking_rules":null,"highlights":"打卡"}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"乌菲兹美术馆","suggested_duration":null,"booking_rules":"优先通道省时间","highlights":"看文艺复兴真迹"}
+{"type":"POI","country":"意大利","city":"威尼斯","name":"圣马可广场","suggested_duration":null,"booking_rules":null,"highlights":"喝杯咖啡"}
+{"type":"POI","country":"法国","city":"凡尔赛","name":"凡尔赛宫","suggested_duration":null,"booking_rules":"优先通道省时间","highlights":null}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢浮宫","suggested_duration":null,"booking_rules":"优先通道省时间","highlights":null}
+{"type":"POI","country":"瑞士","city":"因特拉肯","name":"少女峰","suggested_duration":null,"booking_rules":"火车直达","highlights":"雪山轻松玩，想省力就上少女峰"}
+{"type":"POI","country":"瑞士","city":"因特拉肯","name":"First山","suggested_duration":null,"booking_rules":null,"highlights":"徒步或小探险项目"}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"米开朗基罗广场","suggested_duration":null,"booking_rules":null,"highlights":"看日落"}
+{"type":"POI","country":"意大利","city":"米兰","name":"米兰大教堂广场","suggested_duration":null,"booking_rules":null,"highlights":"坐着发呆"}
+{"type":"POI","country":"法国","city":"巴黎","name":"塞纳河游船","suggested_duration":null,"booking_rules":null,"highlights":"看巴黎两岸"}
+{"type":"POI","country":"意大利","city":"锡耶纳","name":"田野广场","suggested_duration":null,"booking_rules":null,"highlights":"逛"}
+{"type":"POI","country":"意大利","city":"比萨","name":"比萨斜塔","suggested_duration":null,"booking_rules":null,"highlights":"外面拍推塔照"}
+{"type":"POI","country":"瑞士","city":"施皮茨","name":"施皮茨小镇","suggested_duration":null,"booking_rules":null,"highlights":"看湖边教堂，瑞士最美小镇之一"}
+{"type":"POI","country":"法国","city":"巴黎","name":"巴黎迪士尼乐园","suggested_duration":"一天","booking_rules":null,"highlights":"玩项目或逛店、看巡游"}
+{"type":"TIP","country":null,"city":null,"content":"航班尽量选夜航，上飞机睡觉下飞机玩，景点时间宽裕，午饭后留点自由时间，累了就回酒店躺一会儿"}
+{"type":"TIP","country":null,"city":null,"content":"全程中文向导＋专车接送，车门到车门，不用拖着箱子赶火车，路上还能安心聊天"}
+{"type":"TIP","country":null,"city":null,"content":"城市+小镇+湖山+艺术，每天安排合理，走累了就坐车上歇，不硬撑"}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"Ristorante La Grotta Toscana","suggested_duration":null,"booking_rules":"需提前预定，可享5折","highlights":"50欧吃到1.4kg大牛排"}
+{"type":"POI","country":"法国","city":"尼斯","name":"La Vague","suggested_duration":null,"booking_rules":null,"highlights":"焗蜗牛和海鲜饭非常好吃"}
+{"type":"POI","country":"法国","city":"尼斯","name":"Le Séjour","suggested_duration":null,"booking_rules":"连续多年米其林","highlights":"前菜惊艳，尤其鹅肝"}
+{"type":"POI","country":"瑞士","city":"因特拉肯","name":"Husi Bierhaus","suggested_duration":null,"booking_rules":"瑞士性价比很高","highlights":"烤猪肋排太大份太过瘾"}
+{"type":"POI","country":"法国","city":"巴黎","name":"Kozy","suggested_duration":null,"booking_rules":"排队人很多","highlights":"brunch很棒，推荐班尼迪"}
+{"type":"POI","country":"意大利","city":"罗马","name":"老成都川菜(TERMINI中央火车站店)","suggested_duration":null,"booking_rules":"量大还便宜","highlights":"很正宗的川菜，口水鸡是目前最好吃的"}
+{"type":"POI","country":"意大利","city":"罗马","name":"Giolitti","suggested_duration":null,"booking_rules":"赫本同款","highlights":"gelato最好吃，推荐开心果和大米味"}
+{"type":"POI","country":"法国","city":"昂提布","name":"Cha Bothé","suggested_duration":null,"booking_rules":null,"highlights":"brunch精致也好吃"}
+{"type":"POI","country":"意大利","city":"罗马","name":"Ristorante Pizzeria Mino 1960","suggested_duration":null,"booking_rules":null,"highlights":"提拉米苏很好吃"}
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":16,"core_style":null}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢浮宫","suggested_duration":"5小时（但远不够）","booking_rules":null,"highlights":"拿破仑加冕图震撼；汉谟拉比法典；世界顶级博物馆，需数日深度游览"}
+{"type":"POI","country":"法国","city":"巴黎","name":"海军府","suggested_duration":null,"booking_rules":"汉化讲解自动播放，无需额外租讲解器","highlights":"汉化讲解体验最佳；综艺种草后实地验证更妙"}
+{"type":"POI","country":"法国","city":"巴黎","name":"卢森堡公园","suggested_duration":null,"booking_rules":null,"highlights":"适合长时间休憩发呆；天气好时可随意躺卧"}
+{"type":"POI","country":"法国","city":"巴黎","name":"杜乐丽花园","suggested_duration":null,"booking_rules":null,"highlights":"适合长时间休憩发呆；天气好时可随意躺卧"}
+{"type":"POI","country":"瑞士","city":"因特拉肯","name":"First山","suggested_duration":null,"booking_rules":null,"highlights":"飞鹰滑翔、卡丁车、高空栈道；景色极佳；项目爱好者必去"}
+{"type":"POI","country":"瑞士","city":"施皮茨","name":"施皮茨游船","suggested_duration":null,"booking_rules":"含在通票内，可免费乘坐返回因特拉肯","highlights":"风光难以用手机呈现；建议吹风、用眼睛沉浸享受"}
+{"type":"POI","country":"意大利","city":"多洛米蒂","name":"多洛米蒂","suggested_duration":null,"booking_rules":"需租车自驾","highlights":"刀锋山徒步+布拉伊耶斯湖游船；安静小镇、美景美食兼具；比瑞士更具视觉冲击力"}
+{"type":"TIP","country":"意大利","city":"多洛米蒂","content":"推荐租车自驾，以充分体验多洛米蒂的美景、美食与宁静小镇"}
+{"type":"ROUTE","countries":["法国","意大利","瑞士"],"total_days":11,"core_style":null}
+{"type":"POI","country":"意大利","city":"罗马","name":"罗马","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"锡耶纳","name":"锡耶纳","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"佛罗伦萨","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"比萨","name":"比萨","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"博洛尼亚","name":"博洛尼亚","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"威尼斯","name":"威尼斯","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"维罗纳","name":"维罗纳","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"意大利","city":"米兰","name":"米兰","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"瑞士","city":"卢塞恩","name":"卢塞恩","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"瑞士","city":"苏黎世","name":"苏黎世","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"POI","country":"法国","city":"巴黎","name":"巴黎","suggested_duration":null,"booking_rules":null,"highlights":null}
+{"type":"TIP","country":"法国","city":null,"content":"在哪个地方停留最久或者从哪国入境，就办哪个国家的签证"}
+{"type":"TIP","country":"意大利","city":null,"content":"在哪个地方停留最久或者从哪国入境，就办哪个国家的签证"}
+{"type":"TIP","country":"瑞士","city":null,"content":"在哪个地方停留最久或者从哪国入境，就办哪个国家的签证"}
+{"type":"TIP","country":null,"city":null,"content":"出门前可以准备一些少量的现金方便使用支付小费或是上厕所、买咖啡"}
+{"type":"TIP","country":null,"city":null,"content":"欧洲大多数酒店不提供免费的洗漱用品、拖鞋、转换插头，建议自己提前准备"}
+{"type":"TIP","country":null,"city":null,"content":"欧洲安全系数低，小偷多，不建议穿戴名牌服饰和包包"}
+{"type":"TIP","country":null,"city":null,"content":"商店一般周一至周六营业，周日很多商店休息"}
+{"type":"TIP","country":null,"city":null,"content":"带上一张欧洲小地图,对了解行程以及每个国家的方位很有帮助"}
+{"type":"ROUTE","countries":["法国","瑞士","意大利"],"total_days":18,"core_style":"自由行"}
+{"type":"POI","country":"瑞士","city":"施皮茨","name":"施皮茨湖边民宿","suggested_duration":null,"booking_rules":"民宿，价格人均超1000元/晚","highlights":"湖边，空间大，可做饭，非常漂亮"}
+{"type":"POI","country":"意大利","city":"佛罗伦萨","name":"某川菜餐厅","suggested_duration":null,"booking_rules":null,"highlights":"川菜，连续两天就餐，被评价为‘最好吃的一顿中餐’"}
+{"type":"POI","country":"意大利","city":"罗马","name":"老成都餐厅","suggested_duration":null,"booking_rules":null,"highlights":"评价为‘非常失望’"}
+{"type":"POI","country":"瑞士","city":"苏黎世","name":"某西餐厅","suggested_duration":null,"booking_rules":null,"highlights":"西餐中最满意的一顿，肉炖得软烂"}
+{"type":"POI","country":"意大利","city":"那不勒斯","name":"《天才女友》打卡地（巨幅画像墙）","suggested_duration":null,"booking_rules":null,"highlights":"影视取景地，环境脏乱，人少，仅找到主打卡点"}
+{"type":"TIP","country":"意大利","city":null,"content":"意大利火车一定要看大屏幕，换乘时间需预留充足"}
+{"type":"TIP","country":"意大利","city":"那不勒斯","content":"《天才女友》打卡地周边环境脏乱、人少，注意安全，建议快速打卡后离开"}
+{"type":"TIP","country":null,"city":null,"content":"行李箱切勿托运贵重物品，欧洲转机存在被撬风险"}
