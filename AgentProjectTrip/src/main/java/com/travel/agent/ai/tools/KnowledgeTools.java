@@ -48,7 +48,7 @@ public class KnowledgeTools {
         }
 
         String combined = results.stream()
-                .map(Document::getText)    // ✅ 使用最新版本的正确 API
+                .map(Document::getText)    //  使用最新版本的正确 API
                 .collect(Collectors.joining("\n\n"));
 
         return "检索到的参考攻略：\n" + combined;
