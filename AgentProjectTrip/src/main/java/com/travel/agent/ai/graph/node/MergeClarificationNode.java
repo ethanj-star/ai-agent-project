@@ -20,7 +20,7 @@ import java.util.Set;
  * <ul>
  *   <li>读取上一轮保存的 pending 状态。</li>
  *   <li>把用户当前输入作为补充信息合并进原始任务。</li>
- *   <li>优先使用当前 Gatekeeper 提取到的目的地、时间和关键词刷新结构化字段。</li>
+ *   <li>优先使用当前 Gatekeeper 提取到的目的地、时间、时长和关键词刷新结构化字段。</li>
  *   <li>清理 pending 问题，让工作流回到 PLANNING 状态继续续跑。</li>
  * </ul>
  * </p>
@@ -45,11 +45,16 @@ public class MergeClarificationNode {
         state.setRoute(request == null || request.getRoute() == null ? state.getRoute() : request.getRoute());
         state.setDestinations(resolveDestinations(state, request));
         state.setTravelTime(resolveTravelTime(state, request));
+        DurationParser.DurationResult duration = resolveDuration(state, request);
+        state.setDurationDays(duration.durationDays());
+        state.setDurationText(duration.durationText());
         state.setKeywords(resolveKeywords(state, request));
         state.setClarificationAnswers(appendAnswer(state.getClarificationAnswers(), currentMessage));
 
         state.setPendingQuestions(new ArrayList<>());
         state.setValidationIssues(new ArrayList<>());
+        state.setBranchTasks(new ArrayList<>());
+        state.setBranchResults(new ArrayList<>());
         state.setDraft(null);
         state.setFinalAnswer(null);
         state.setErrorMessage(null);
@@ -89,16 +94,31 @@ public class MergeClarificationNode {
 
     private static String resolveTravelTime(TravelPlanState state, GraphInputRequest request) {
         String newTime = entities(request) == null ? null : entities(request).getTime();
-        if (hasText(newTime)) {
+        if (hasText(newTime) && !DurationParser.isDurationExpression(newTime)) {
             return newTime.trim();
         }
-        return state == null ? null : state.getTravelTime();
+        return state == null || !hasText(state.getTravelTime()) ? "未指定" : state.getTravelTime();
+    }
+
+    private static DurationParser.DurationResult resolveDuration(TravelPlanState state, GraphInputRequest request) {
+        DurationParser.DurationResult newDuration = DurationParser.extract(
+                request == null ? null : request.getUserQuery(),
+                entities(request) == null ? null : entities(request).getTime(),
+                safeList(entities(request) == null ? null : entities(request).getKeywords()));
+        if (newDuration.present()) {
+            return newDuration;
+        }
+        if (state != null && state.getDurationDays() != null && hasText(state.getDurationText())) {
+            return new DurationParser.DurationResult(state.getDurationDays(), state.getDurationText());
+        }
+        return DurationParser.DurationResult.empty();
     }
 
     private static List<String> resolveKeywords(TravelPlanState state, GraphInputRequest request) {
         Set<String> merged = new LinkedHashSet<>();
-        merged.addAll(state == null ? List.of() : safeList(state.getKeywords()));
-        merged.addAll(safeList(entities(request) == null ? null : entities(request).getKeywords()));
+        merged.addAll(DurationParser.removeDurationKeywords(state == null ? List.of() : safeList(state.getKeywords())));
+        merged.addAll(DurationParser.removeDurationKeywords(
+                safeList(entities(request) == null ? null : entities(request).getKeywords())));
         return new ArrayList<>(merged);
     }
 

@@ -17,7 +17,8 @@ import java.util.List;
  * <p>职责：
  * <ul>
  *   <li>把 MastermindAgent 传入的 {@link GraphInputRequest} 转换为工作流共享状态。</li>
- *   <li>从 Gatekeeper 的 entities 中提取目的地、时间和关键词。</li>
+ *   <li>从 Gatekeeper 的 entities 中提取目的地、出行时间、行程时长和关键词。</li>
+ *   <li>把“10天”“一周左右”等时长表达写入 duration 字段，避免误当成出发时间。</li>
  *   <li>统一处理 null 和空集合，保证后续节点可以安全读取状态。</li>
  * </ul>
  * </p>
@@ -32,7 +33,7 @@ public class InitStateNode {
      * <ol>
      *   <li>创建空的 {@link TravelPlanState}。</li>
      *   <li>写入用户原始输入和 Gatekeeper 路由结果。</li>
-     *   <li>从 entities 中提取 locations、time、keywords。</li>
+     *   <li>从 entities 中提取 locations、time、duration、keywords。</li>
      *   <li>对缺失字段写入空列表或“未指定”，避免后续节点空指针。</li>
      * </ol>
      * </p>
@@ -59,16 +60,34 @@ public class InitStateNode {
                 ? null
                 : request.getRoute().getEntities();
 
+        List<String> keywords = safeList(entities == null ? null : entities.getKeywords());
+        String rawTravelTime = entities == null ? null : entities.getTime();
+        DurationParser.DurationResult duration =
+                DurationParser.extract(request.getUserQuery(), rawTravelTime, keywords);
+
         state.setDestinations(safeList(entities == null ? null : entities.getLocations()));
-        state.setTravelTime(hasText(entities == null ? null : entities.getTime())
-                ? entities.getTime().trim()
-                : "未指定");
-        state.setKeywords(safeList(entities == null ? null : entities.getKeywords()));
+        state.setTravelTime(resolveTravelTime(rawTravelTime));
+        state.setDurationDays(duration.durationDays());
+        state.setDurationText(duration.durationText());
+        state.setKeywords(DurationParser.removeDurationKeywords(keywords));
         state.setSuccess(false);
         state.setWorkflowStatus(WorkflowStatus.PLANNING);
         state.setTurnCount(1);
 
         return state;
+    }
+
+    /**
+     * 解析出真正的出发时间。
+     *
+     * <p>Gatekeeper 可能把“10天”误放进 time 字段；这种值应交给 duration，
+     * travelTime 则保持“未指定”，表示用户还没有给出具体日期或月份。</p>
+     */
+    private static String resolveTravelTime(String rawTravelTime) {
+        if (!hasText(rawTravelTime) || DurationParser.isDurationExpression(rawTravelTime)) {
+            return "未指定";
+        }
+        return rawTravelTime.trim();
     }
 
     /**

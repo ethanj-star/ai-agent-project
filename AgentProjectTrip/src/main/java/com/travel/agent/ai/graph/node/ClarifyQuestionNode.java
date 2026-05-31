@@ -102,6 +102,12 @@ public class ClarifyQuestionNode {
                             "travelTime",
                             "你的出行日期或大致月份是什么？如果还没定，也可以告诉我季节或假期范围。",
                             true);
+            case "MISSING_DURATION" ->
+                    new ClarificationQuestion(
+                            "travel_duration",
+                            "duration",
+                            "你这次大概想玩几天？例如 5天、10天，或者一周左右。",
+                            true);
             case "MISSING_BUDGET" ->
                     new ClarificationQuestion(
                             "budget_scope",

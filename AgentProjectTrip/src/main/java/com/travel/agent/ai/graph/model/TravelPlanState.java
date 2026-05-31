@@ -13,7 +13,7 @@ import java.util.List;
  * <p>职责：
  * <ul>
  *   <li>贯穿 Init、RAG、Planner、Validator、Finalizer 全部节点。</li>
- *   <li>保存用户输入、Gatekeeper 实体、RAG 上下文、规划草案、校验问题和最终答案。</li>
+ *   <li>保存用户输入、Gatekeeper 实体、行程时长、RAG 上下文、规划草案、校验问题和最终答案。</li>
  *   <li>为第二阶段迁移到 LangGraph4j StateGraph 提供稳定的状态模型。</li>
  * </ul>
  * </p>
@@ -34,7 +34,13 @@ public class TravelPlanState {
     /** 用户提到的出行时间；缺失时由 InitStateNode 写入“未指定” */
     private String travelTime;
 
-    /** 用户偏好、约束和其他关键词，如预算、天数、避开人多等 */
+    /** 归一化后的行程天数，例如“10天”会写入 10。 */
+    private Integer durationDays;
+
+    /** 用户原始时长表达，例如“10天”“一周左右”“5晚6天”。 */
+    private String durationText;
+
+    /** 用户偏好、约束和其他关键词，如预算、避开人多等；行程天数会单独写入 duration 字段。 */
     private List<String> keywords = new ArrayList<>();
 
     /** 私有知识库检索出的攻略、防坑和 POI 上下文 */
@@ -73,6 +79,12 @@ public class TravelPlanState {
     /** 当前轮用户输入，便于 MergeClarificationNode 和日志查看。 */
     private String lastUserMessage;
 
+    /** 第三阶段由 BranchDispatchNode 生成的分支任务列表。 */
+    private List<BranchTask> branchTasks = new ArrayList<>();
+
+    /** 第三阶段由 BranchExecuteNode 写入的分支执行结果。 */
+    private List<BranchResult> branchResults = new ArrayList<>();
+
     public String getUserQuery() {
         return userQuery;
     }
@@ -103,6 +115,22 @@ public class TravelPlanState {
 
     public void setTravelTime(String travelTime) {
         this.travelTime = travelTime;
+    }
+
+    public Integer getDurationDays() {
+        return durationDays;
+    }
+
+    public void setDurationDays(Integer durationDays) {
+        this.durationDays = durationDays;
+    }
+
+    public String getDurationText() {
+        return durationText;
+    }
+
+    public void setDurationText(String durationText) {
+        this.durationText = durationText;
     }
 
     public List<String> getKeywords() {
@@ -207,5 +235,21 @@ public class TravelPlanState {
 
     public void setLastUserMessage(String lastUserMessage) {
         this.lastUserMessage = lastUserMessage;
+    }
+
+    public List<BranchTask> getBranchTasks() {
+        return branchTasks;
+    }
+
+    public void setBranchTasks(List<BranchTask> branchTasks) {
+        this.branchTasks = branchTasks == null ? new ArrayList<>() : branchTasks;
+    }
+
+    public List<BranchResult> getBranchResults() {
+        return branchResults;
+    }
+
+    public void setBranchResults(List<BranchResult> branchResults) {
+        this.branchResults = branchResults == null ? new ArrayList<>() : branchResults;
     }
 }

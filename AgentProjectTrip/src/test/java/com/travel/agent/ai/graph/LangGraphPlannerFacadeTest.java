@@ -6,6 +6,8 @@ import com.travel.agent.ai.graph.model.GraphResult;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.ValidationIssue;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
+import com.travel.agent.ai.graph.node.BranchDispatchNode;
+import com.travel.agent.ai.graph.node.BranchExecuteNode;
 import com.travel.agent.ai.graph.node.ClarifyQuestionNode;
 import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
@@ -16,11 +18,13 @@ import com.travel.agent.ai.graph.node.RetrieveKnowledgeNode;
 import com.travel.agent.ai.graph.node.ValidateDraftNode;
 import com.travel.agent.ai.graph.store.InMemoryConversationStateStore;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -29,7 +33,7 @@ import static org.mockito.Mockito.when;
 /**
  * LangGraphPlannerFacade 的工作流测试。
  *
- * <p>重点验证第一阶段直线流程仍然可用，同时覆盖第二阶段澄清追问和 pending 续跑能力。</p>
+ * <p>重点验证第一阶段直线流程仍然可用，同时覆盖第二阶段澄清追问、pending 续跑和第三阶段分支接线能力。</p>
  */
 class LangGraphPlannerFacadeTest {
 
@@ -103,6 +107,8 @@ class LangGraphPlannerFacadeTest {
     void planPausesForClarificationAndSavesPendingState() {
         InitStateNode init = mock(InitStateNode.class);
         RetrieveKnowledgeNode retrieve = mock(RetrieveKnowledgeNode.class);
+        BranchDispatchNode branchDispatch = mock(BranchDispatchNode.class);
+        BranchExecuteNode branchExecute = mock(BranchExecuteNode.class);
         PlanDraftNode plan = mock(PlanDraftNode.class);
         ValidateDraftNode validate = mock(ValidateDraftNode.class);
         FinalizeAnswerNode finalize = mock(FinalizeAnswerNode.class);
@@ -116,6 +122,8 @@ class LangGraphPlannerFacadeTest {
         when(init.init(request)).thenReturn(state);
         when(precheck.check(state)).thenReturn(state);
         when(retrieve.retrieve(state)).thenReturn(state);
+        when(branchDispatch.dispatch(state)).thenReturn(state);
+        when(branchExecute.execute(state)).thenReturn(state);
         when(plan.plan(state)).thenReturn(state);
         when(validate.validate(state)).thenAnswer(invocation -> {
             state.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
@@ -127,6 +135,8 @@ class LangGraphPlannerFacadeTest {
         LangGraphPlannerFacade facade = new LangGraphPlannerFacade(
                 init,
                 retrieve,
+                branchDispatch,
+                branchExecute,
                 plan,
                 validate,
                 new ClarifyQuestionNode(),
@@ -150,6 +160,8 @@ class LangGraphPlannerFacadeTest {
     void planPreClarifiesBroadDestinationBeforeRetrievalAndPlanner() {
         InitStateNode init = mock(InitStateNode.class);
         RetrieveKnowledgeNode retrieve = mock(RetrieveKnowledgeNode.class);
+        BranchDispatchNode branchDispatch = mock(BranchDispatchNode.class);
+        BranchExecuteNode branchExecute = mock(BranchExecuteNode.class);
         PlanDraftNode plan = mock(PlanDraftNode.class);
         ValidateDraftNode validate = mock(ValidateDraftNode.class);
         FinalizeAnswerNode finalize = mock(FinalizeAnswerNode.class);
@@ -165,6 +177,8 @@ class LangGraphPlannerFacadeTest {
         LangGraphPlannerFacade facade = new LangGraphPlannerFacade(
                 init,
                 retrieve,
+                branchDispatch,
+                branchExecute,
                 plan,
                 validate,
                 new ClarifyQuestionNode(),
@@ -179,9 +193,71 @@ class LangGraphPlannerFacadeTest {
         assertThat(result.getAnswer()).contains("你更想去哪些国家或城市");
         assertThat(store.findPendingState("s1")).isPresent();
         verify(retrieve, never()).retrieve(any());
+        verify(branchDispatch, never()).dispatch(any());
+        verify(branchExecute, never()).execute(any());
         verify(plan, never()).plan(any());
         verify(validate, never()).validate(any());
         verify(finalize, never()).finish(any());
+    }
+
+    /**
+     * 验证第三阶段分支节点会在 RAG 之后、Planner 之前执行。
+     */
+    @Test
+    void planRunsBranchWorkflowBetweenRetrieveAndPlanner() {
+        InitStateNode init = mock(InitStateNode.class);
+        RetrieveKnowledgeNode retrieve = mock(RetrieveKnowledgeNode.class);
+        BranchDispatchNode branchDispatch = mock(BranchDispatchNode.class);
+        BranchExecuteNode branchExecute = mock(BranchExecuteNode.class);
+        PlanDraftNode plan = mock(PlanDraftNode.class);
+        ValidateDraftNode validate = mock(ValidateDraftNode.class);
+        FinalizeAnswerNode finalize = mock(FinalizeAnswerNode.class);
+        PreClarifyCheckNode precheck = mock(PreClarifyCheckNode.class);
+        InMemoryConversationStateStore store = new InMemoryConversationStateStore();
+
+        GraphInputRequest request = new GraphInputRequest();
+        request.setSessionId("branch-s1");
+        TravelPlanState state = new TravelPlanState();
+        TravelPlanState finalState = new TravelPlanState();
+        finalState.setSuccess(true);
+        finalState.setFinalAnswer("branch final answer");
+        finalState.setValidationIssues(List.of());
+
+        when(init.init(request)).thenReturn(state);
+        when(precheck.check(state)).thenReturn(state);
+        when(retrieve.retrieve(state)).thenReturn(state);
+        when(branchDispatch.dispatch(state)).thenReturn(state);
+        when(branchExecute.execute(state)).thenReturn(state);
+        when(plan.plan(state)).thenReturn(state);
+        when(validate.validate(state)).thenReturn(state);
+        when(finalize.finish(state)).thenReturn(finalState);
+
+        LangGraphPlannerFacade facade = new LangGraphPlannerFacade(
+                init,
+                retrieve,
+                branchDispatch,
+                branchExecute,
+                plan,
+                validate,
+                new ClarifyQuestionNode(),
+                new MergeClarificationNode(),
+                precheck,
+                finalize,
+                store);
+
+        GraphResult result = facade.plan(request);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getAnswer()).isEqualTo("branch final answer");
+        InOrder order = inOrder(init, precheck, retrieve, branchDispatch, branchExecute, plan, validate, finalize);
+        order.verify(init).init(request);
+        order.verify(precheck).check(state);
+        order.verify(retrieve).retrieve(state);
+        order.verify(branchDispatch).dispatch(state);
+        order.verify(branchExecute).execute(state);
+        order.verify(plan).plan(state);
+        order.verify(validate).validate(state);
+        order.verify(finalize).finish(state);
     }
 
     /**
@@ -191,6 +267,8 @@ class LangGraphPlannerFacadeTest {
     void planResumesPendingStateAndClearsItAfterCompletion() {
         InitStateNode init = mock(InitStateNode.class);
         RetrieveKnowledgeNode retrieve = mock(RetrieveKnowledgeNode.class);
+        BranchDispatchNode branchDispatch = mock(BranchDispatchNode.class);
+        BranchExecuteNode branchExecute = mock(BranchExecuteNode.class);
         PlanDraftNode plan = mock(PlanDraftNode.class);
         ValidateDraftNode validate = mock(ValidateDraftNode.class);
         FinalizeAnswerNode finalize = mock(FinalizeAnswerNode.class);
@@ -199,10 +277,13 @@ class LangGraphPlannerFacadeTest {
         TravelPlanState pending = new TravelPlanState();
         pending.setSessionId("s1");
         pending.setUserQuery("我想下个月去欧洲玩，帮我安排");
+        pending.setTravelTime("下个月");
         pending.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
         store.savePendingState("s1", pending);
 
         when(retrieve.retrieve(any(TravelPlanState.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(branchDispatch.dispatch(any(TravelPlanState.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(branchExecute.execute(any(TravelPlanState.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(plan.plan(any(TravelPlanState.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(validate.validate(any(TravelPlanState.class))).thenAnswer(invocation -> {
             TravelPlanState state = invocation.getArgument(0);
@@ -211,6 +292,9 @@ class LangGraphPlannerFacadeTest {
         });
         when(finalize.finish(any(TravelPlanState.class))).thenAnswer(invocation -> {
             TravelPlanState state = invocation.getArgument(0);
+            assertThat(state.getTravelTime()).isEqualTo("下个月");
+            assertThat(state.getDurationDays()).isEqualTo(10);
+            assertThat(state.getDurationText()).isEqualTo("10天");
             state.setSuccess(true);
             state.setFinalAnswer(state.getUserQuery());
             state.setWorkflowStatus(WorkflowStatus.COMPLETED);
@@ -220,6 +304,8 @@ class LangGraphPlannerFacadeTest {
         LangGraphPlannerFacade facade = new LangGraphPlannerFacade(
                 init,
                 retrieve,
+                branchDispatch,
+                branchExecute,
                 plan,
                 validate,
                 new ClarifyQuestionNode(),

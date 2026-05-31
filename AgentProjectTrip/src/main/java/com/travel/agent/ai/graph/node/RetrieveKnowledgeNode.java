@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  *
  * <p>职责：
  * <ul>
- *   <li>根据用户原始输入、目的地、时间和关键词构造语义检索 query。</li>
+ *   <li>根据用户原始输入、目的地、出行时间、行程时长和关键词构造语义检索 query。</li>
  *   <li>调用 {@link KnowledgeTools} 从 Pinecone 私有知识库检索攻略、防坑和 POI 上下文。</li>
  *   <li>将检索结果写回 {@link TravelPlanState#setRagContext(String)}，供 Planner 节点使用。</li>
  *   <li>知识库不可用时写入兜底上下文，不中断整条规划流程。</li>
@@ -79,7 +79,7 @@ public class RetrieveKnowledgeNode {
     /**
      * 根据当前状态构造 Pinecone 语义检索 query。
      *
-     * <p>拼接策略：优先保留用户原始问题，再补充 Gatekeeper 提取出的目的地、时间和偏好。
+     * <p>拼接策略：优先保留用户原始问题，再补充 Gatekeeper 提取出的目的地、出行时间、行程时长和偏好。
      * 这样既保留自然语言语义，也给向量检索提供明确实体。</p>
      *
      * @param state 当前旅行规划状态
@@ -94,8 +94,11 @@ public class RetrieveKnowledgeNode {
         if (state.getDestinations() != null && !state.getDestinations().isEmpty()) {
             query.append("目的地: ").append(String.join("、", state.getDestinations())).append(' ');
         }
-        if (hasText(state.getTravelTime())) {
+        if (hasKnownTravelTime(state.getTravelTime())) {
             query.append("时间: ").append(state.getTravelTime()).append(' ');
+        }
+        if (hasText(state.getDurationText())) {
+            query.append("时长: ").append(state.getDurationText()).append(' ');
         }
         if (state.getKeywords() != null && !state.getKeywords().isEmpty()) {
             query.append("偏好: ").append(String.join("、", state.getKeywords()));
@@ -110,5 +113,9 @@ public class RetrieveKnowledgeNode {
      */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static boolean hasKnownTravelTime(String value) {
+        return hasText(value) && !"未指定".equals(value.trim());
     }
 }

@@ -55,4 +55,21 @@ class ClarifyQuestionNodeTest {
         assertThat(result.getPendingQuestions()).hasSize(3);
         assertThat(result.getFinalAnswer()).contains("1.").contains("2.").contains("3.");
     }
+
+    /**
+     * 缺少行程时长时，应能生成 duration 追问，供后续阶段选择是否启用。
+     */
+    @Test
+    void askBuildsDurationQuestionForMissingDuration() {
+        TravelPlanState state = new TravelPlanState();
+        state.setValidationIssues(List.of(
+                ValidationIssue.medium("MISSING_DURATION", "用户没有提供明确行程天数。")));
+
+        TravelPlanState result = node.ask(state);
+
+        assertThat(result.getPendingQuestions())
+                .extracting(ClarificationQuestion::getField)
+                .containsExactly("duration");
+        assertThat(result.getFinalAnswer()).contains("大概想玩几天");
+    }
 }

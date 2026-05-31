@@ -52,6 +52,10 @@ class MergeClarificationNodeTest {
                 .contains("我想下个月去欧洲玩")
                 .contains("用户补充信息：法国和意大利");
         assertThat(result.getDestinations()).containsExactly("法国", "意大利");
+        assertThat(result.getTravelTime()).isEqualTo("下个月");
+        assertThat(result.getDurationDays()).isEqualTo(10);
+        assertThat(result.getDurationText()).isEqualTo("10天");
+        assertThat(result.getKeywords()).containsExactly("预算1200欧", "避开人多");
         assertThat(result.getPendingQuestions()).isEmpty();
         assertThat(result.getClarificationAnswers()).containsExactly(request.getUserQuery());
     }

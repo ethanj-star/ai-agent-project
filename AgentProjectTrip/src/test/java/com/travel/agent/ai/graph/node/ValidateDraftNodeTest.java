@@ -81,4 +81,54 @@ class ValidateDraftNodeTest {
                 .contains("BROAD_DESTINATION");
         assertThat(result.getWorkflowStatus()).isEqualTo(WorkflowStatus.NEEDS_CLARIFICATION);
     }
+
+    /**
+     * 明确要求规划行程但没有提供天数时，应输出 MISSING_DURATION。
+     */
+    @Test
+    void validateFindsMissingDurationForItineraryPlanning() {
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("帮我规划法国和意大利行程");
+        state.setDestinations(List.of("法国", "意大利"));
+        state.setTravelTime("国庆节");
+        state.setRagContext("检索到的参考攻略");
+
+        PlannerDraft draft = new PlannerDraft();
+        draft.setBudgetNotes("预算需要后续确认。");
+        draft.setItineraryMarkdown("Day 1 Paris. Day 2 Lyon. Day 3 Nice. Day 4 Rome. Day 5 Florence. "
+                + "Day 6 Venice. Day 7 Milan. Day 8 Zurich. Day 9 Lucerne. Day 10 Paris.");
+        state.setDraft(draft);
+
+        TravelPlanState result = node.validate(state);
+
+        assertThat(result.getValidationIssues())
+                .extracting(ValidationIssue::getCode)
+                .contains("MISSING_DURATION");
+    }
+
+    /**
+     * 已经解析出 durationDays 时，不应再提示缺少行程天数。
+     */
+    @Test
+    void validateDoesNotFindMissingDurationWhenDurationExists() {
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("帮我规划法国和意大利10天行程");
+        state.setDestinations(List.of("法国", "意大利"));
+        state.setTravelTime("国庆节");
+        state.setDurationDays(10);
+        state.setDurationText("10天");
+        state.setRagContext("检索到的参考攻略");
+
+        PlannerDraft draft = new PlannerDraft();
+        draft.setBudgetNotes("预算需要后续确认。");
+        draft.setItineraryMarkdown("Day 1 Paris. Day 2 Lyon. Day 3 Nice. Day 4 Rome. Day 5 Florence. "
+                + "Day 6 Venice. Day 7 Milan. Day 8 Zurich. Day 9 Lucerne. Day 10 Paris.");
+        state.setDraft(draft);
+
+        TravelPlanState result = node.validate(state);
+
+        assertThat(result.getValidationIssues())
+                .extracting(ValidationIssue::getCode)
+                .doesNotContain("MISSING_DURATION");
+    }
 }

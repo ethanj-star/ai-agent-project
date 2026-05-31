@@ -18,7 +18,7 @@ import java.util.Locale;
  * <p>职责：
  * <ul>
  *   <li>对 PlannerDraft 进行第一阶段的确定性 Java 规则校验。</li>
- *   <li>识别目的地、日期、预算、草案内容和 RAG 上下文等基础缺口。</li>
+ *   <li>识别目的地、日期、行程时长、预算、草案内容和 RAG 上下文等基础缺口。</li>
  *   <li>输出结构化 {@link ValidationIssue} 列表，供 Finalizer 展示给用户。</li>
  * </ul>
  * </p>
@@ -36,6 +36,7 @@ public class ValidateDraftNode {
      * <ul>
      *   <li>目的地是否缺失。</li>
      *   <li>出行时间是否缺失。</li>
+     *   <li>行程时长是否缺失。</li>
      *   <li>用户提到预算时，草案是否包含预算说明。</li>
      *   <li>草案是否为空或过短。</li>
      *   <li>RAG 上下文是否不足。</li>
@@ -68,6 +69,10 @@ public class ValidateDraftNode {
         // 时间缺失不会阻止生成草案，但会影响天气、价格和预约建议，因此标记为 MEDIUM
         if (!hasText(state.getTravelTime()) || "未指定".equals(state.getTravelTime())) {
             issues.add(ValidationIssue.medium("MISSING_DATE", "用户没有提供明确出行时间。"));
+        }
+
+        if (state.getDurationDays() == null && looksLikeItineraryPlanning(state)) {
+            issues.add(ValidationIssue.medium("MISSING_DURATION", "用户没有提供明确行程天数。"));
         }
 
         if (draft == null) {
@@ -117,6 +122,34 @@ public class ValidateDraftNode {
     }
 
     /**
+     * 判断当前请求是否像完整行程规划。
+     *
+     * <p>只有在用户明显要求“安排/规划/行程/路线”等场景下，缺少 duration 才提示。
+     * 这样可以避免用户只是问“法国有哪些景点”时被不必要地追问旅行天数。</p>
+     */
+    private static boolean looksLikeItineraryPlanning(TravelPlanState state) {
+        if (state == null) {
+            return false;
+        }
+        StringBuilder text = new StringBuilder();
+        if (hasText(state.getUserQuery())) {
+            text.append(state.getUserQuery()).append(' ');
+        }
+        if (state.getKeywords() != null) {
+            text.append(String.join(" ", state.getKeywords()));
+        }
+        String normalized = text.toString().toLowerCase(Locale.ROOT);
+        return normalized.contains("安排")
+                || normalized.contains("规划")
+                || normalized.contains("行程")
+                || normalized.contains("路线")
+                || normalized.contains("怎么玩")
+                || normalized.contains("旅游计划")
+                || normalized.contains("itinerary")
+                || normalized.contains("plan");
+    }
+
+    /**
      * 判断目的地是否只有“欧洲 / 国外 / 海外”这类宽泛范围。
      *
      * <p>Gatekeeper 会把“我想去欧洲玩”提取为 locations=["欧洲"]。这不应被视为
@@ -137,7 +170,7 @@ public class ValidateDraftNode {
     /**
      * 判断当前问题是否需要暂停规划并追问用户。
      *
-     * <p>第二阶段先只把“目的地缺失”和“目的地过宽”视为阻塞问题。预算、日期、RAG 不足等问题仍然可以在最终答案里提示，
+     * <p>第二阶段先只把“目的地缺失”和“目的地过宽”视为阻塞问题。预算、日期、时长、RAG 不足等问题仍然可以在最终答案里提示，
      * 避免系统因为非关键缺口频繁打断用户。</p>
      */
     private static boolean hasBlockingClarificationIssue(List<ValidationIssue> issues) {

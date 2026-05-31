@@ -16,6 +16,7 @@ import java.util.List;
  * <p>职责：
  * <ul>
  *   <li>把 {@link PlannerDraft} 中的结构化字段拼装成用户可读的 Markdown。</li>
+ *   <li>展示 Graph 已确认的目的地、出行时间和行程时长，减少用户误解。</li>
  *   <li>把 Validator 输出的问题显式展示给用户，避免系统假装信息完整。</li>
  *   <li>在草案缺失时输出友好降级文本，保证 API 始终有可读响应。</li>
  * </ul>
@@ -67,6 +68,7 @@ public class FinalizeAnswerNode {
         appendSection(answer, "推荐行程", draft.getItineraryMarkdown());
         appendSection(answer, "预算与预订提醒", draft.getBudgetNotes());
         appendSection(answer, "防坑与风险提醒", draft.getRiskNotes());
+        appendKnownPlanningInfo(answer, state);
         appendAssumptions(answer, draft.getAssumptions());
         appendValidationIssues(answer, state.getValidationIssues());
 
@@ -87,6 +89,36 @@ public class FinalizeAnswerNode {
         }
         answer.append("## ").append(title).append("\n");
         answer.append(content.trim()).append("\n\n");
+    }
+
+    /**
+     * 输出 Graph 已经结构化确认的信息。
+     *
+     * <p>duration 独立后，用户可以直观看到“已知：10天”和“待确认：具体日期”是两回事，
+     * 避免把旅行时长误解为出发时间。</p>
+     */
+    private static void appendKnownPlanningInfo(StringBuilder answer, TravelPlanState state) {
+        if (state == null || !hasAnyKnownPlanningInfo(state)) {
+            return;
+        }
+
+        answer.append("## 已确认信息\n");
+        if (state.getDestinations() != null && !state.getDestinations().isEmpty()) {
+            answer.append("- 目的地：").append(String.join("、", state.getDestinations())).append("\n");
+        }
+        if (hasKnownTravelTime(state.getTravelTime())) {
+            answer.append("- 出行时间：").append(state.getTravelTime().trim()).append("\n");
+        }
+        if (hasText(state.getDurationText())) {
+            answer.append("- 行程时长：").append(state.getDurationText().trim()).append("\n");
+        }
+        answer.append("\n");
+    }
+
+    private static boolean hasAnyKnownPlanningInfo(TravelPlanState state) {
+        return state.getDestinations() != null && !state.getDestinations().isEmpty()
+                || hasKnownTravelTime(state.getTravelTime())
+                || hasText(state.getDurationText());
     }
 
     /**
@@ -145,5 +177,9 @@ public class FinalizeAnswerNode {
      */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static boolean hasKnownTravelTime(String value) {
+        return hasText(value) && !"未指定".equals(value.trim());
     }
 }

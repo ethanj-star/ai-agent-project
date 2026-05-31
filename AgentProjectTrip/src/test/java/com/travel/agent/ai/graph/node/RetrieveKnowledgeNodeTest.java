@@ -31,11 +31,33 @@ class RetrieveKnowledgeNodeTest {
         state.setUserQuery("法国10天怎么玩");
         state.setDestinations(List.of("法国"));
         state.setTravelTime("国庆节");
-        state.setKeywords(List.of("10天"));
+        state.setDurationDays(10);
+        state.setDurationText("10天");
+        state.setKeywords(List.of("避开人多"));
 
         TravelPlanState result = node.retrieve(state);
 
         assertThat(result.getRagContext()).contains("巴黎防坑经验");
+    }
+
+    /**
+     * 构造 RAG query 时应包含行程时长，并跳过“未指定”的出行时间。
+     */
+    @Test
+    void buildQueryContainsDurationAndSkipsUnknownTravelTime() {
+        RetrieveKnowledgeNode node = new RetrieveKnowledgeNode(mock(KnowledgeTools.class));
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("法国和意大利，10天");
+        state.setDestinations(List.of("法国", "意大利"));
+        state.setTravelTime("未指定");
+        state.setDurationDays(10);
+        state.setDurationText("10天");
+
+        String query = node.buildQuery(state);
+
+        assertThat(query).contains("目的地: 法国、意大利");
+        assertThat(query).contains("时长: 10天");
+        assertThat(query).doesNotContain("时间: 未指定");
     }
 
     /**

@@ -33,6 +33,9 @@ class FinalizeAnswerNodeTest {
 
         TravelPlanState state = new TravelPlanState();
         state.setDraft(draft);
+        state.setDestinations(List.of("法国", "意大利"));
+        state.setDurationDays(10);
+        state.setDurationText("10天");
         state.setValidationIssues(List.of(
                 ValidationIssue.medium("MISSING_DATE", "用户没有提供明确出行时间。")));
 
@@ -41,6 +44,8 @@ class FinalizeAnswerNodeTest {
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getFinalAnswer()).contains("# 法国意大利10天");
         assertThat(result.getFinalAnswer()).contains("## 推荐行程");
+        assertThat(result.getFinalAnswer()).contains("## 已确认信息");
+        assertThat(result.getFinalAnswer()).contains("行程时长：10天");
         assertThat(result.getFinalAnswer()).contains("需要确认或注意的信息");
         assertThat(result.getFinalAnswer()).contains("用户没有提供明确出行时间。");
     }

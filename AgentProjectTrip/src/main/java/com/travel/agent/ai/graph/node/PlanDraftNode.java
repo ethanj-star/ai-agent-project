@@ -2,6 +2,7 @@ package com.travel.agent.ai.graph.node;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.travel.agent.ai.AiModelBeanNames;
+import com.travel.agent.ai.graph.model.BranchResult;
 import com.travel.agent.ai.graph.model.PlannerDraft;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import org.slf4j.Logger;
@@ -23,7 +24,7 @@ import java.util.List;
  *
  * <p>职责：
  * <ul>
- *   <li>读取 {@link TravelPlanState} 中的用户输入、Gatekeeper 实体和 RAG 上下文。</li>
+ *   <li>读取 {@link TravelPlanState} 中的用户输入、Gatekeeper 实体、行程时长、RAG 上下文和分支 Agent 结果。</li>
  *   <li>调用核心模型生成结构化 {@link PlannerDraft}。</li>
  *   <li>约束模型输出 JSON，便于后续 Validator 和 Finalizer 使用。</li>
  *   <li>模型输出为空、非 JSON 或调用失败时生成兜底草案，保证直线流程不中断。</li>
@@ -129,7 +130,8 @@ public class PlanDraftNode {
      * 构建 Planner 系统提示词。
      *
      * <p>提示词中同时放入用户原文、Gatekeeper 结构化实体、RAG 上下文和当前日期。
-     * 这样核心模型既能看到自然语言细节，也能利用上游节点提取出的稳定字段。</p>
+     * 这样核心模型既能看到自然语言细节，也能利用上游节点提取出的稳定字段。
+     * 第三阶段开始额外注入分支 Agent 结果，让 Planner 可以区分工具确认信息和工具失败降级信息。</p>
      *
      * @param state 当前旅行规划状态
      * @return 完整系统提示词
@@ -141,9 +143,13 @@ public class PlanDraftNode {
         String keywords = state.getKeywords() == null || state.getKeywords().isEmpty()
                 ? "无"
                 : String.join("、", state.getKeywords());
+        String duration = hasText(state.getDurationText())
+                ? state.getDurationText()
+                : "未指定";
         String ragContext = hasText(state.getRagContext())
                 ? state.getRagContext()
                 : "私有知识库暂无可用上下文。";
+        String branchContext = formatBranchResults(state.getBranchResults());
 
         return """
                 你是一个欧洲旅行规划系统中的 Planner 节点。你的任务是基于用户输入、结构化意图和 RAG 上下文，生成第一版旅行规划草案。
@@ -152,8 +158,10 @@ public class PlanDraftNode {
                 1. 只输出一个合法 JSON Object，不要输出 Markdown 代码块，不要输出解释文字。
                 2. 不要编造已经由工具才能确认的实时价格、实时航班或实时天气。
                 3. 如果用户信息缺失，可以在 assumptions 中说明你做出的假设。
-                4. 行程建议要具体，优先使用 RAG 上下文中的防坑、POI、交通经验。
-                5. 当前系统日期是：%s。
+                4. 如果行程时长已知，推荐行程必须尽量匹配该天数，不要随意拉长或缩短。
+                5. 分支 Agent 成功返回的数据可以作为已确认参考；分支失败或未启用时，只能写风险提醒，不能伪造实时结果。
+                6. 行程建议要具体，优先使用 RAG 上下文中的防坑、POI、交通经验。
+                7. 当前系统日期是：%s。
 
                 用户原始输入：
                 %s
@@ -161,9 +169,13 @@ public class PlanDraftNode {
                 Gatekeeper 提取信息：
                 - 目的地：%s
                 - 出行时间：%s
+                - 行程时长：%s
                 - 关键词：%s
 
                 RAG 上下文：
+                %s
+
+                分支 Agent 结果：
                 %s
 
                 输出 JSON Schema：
@@ -180,9 +192,56 @@ public class PlanDraftNode {
                 defaultText(state.getUserQuery(), "未提供"),
                 destinations,
                 defaultText(state.getTravelTime(), "未指定"),
+                duration,
                 keywords,
-                ragContext
+                ragContext,
+                branchContext
         );
+    }
+
+    /**
+     * 将分支 Agent 结果压缩成适合注入 Planner Prompt 的文本。
+     *
+     * <p>只给 Planner 传递短摘要和必要原始数据，避免工具返回过长内容挤占核心模型上下文。
+     * 失败结果也会显式写入，提醒模型不要编造尚未确认的实时信息。</p>
+     */
+    private static String formatBranchResults(List<BranchResult> branchResults) {
+        if (branchResults == null || branchResults.isEmpty()) {
+            return "暂无分支 Agent 结果。";
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (BranchResult result : branchResults) {
+            if (result == null) {
+                continue;
+            }
+            builder.append("- ")
+                    .append(result.getType() == null ? "UNKNOWN" : result.getType())
+                    .append(result.isSuccess() ? " [SUCCESS] " : " [FAILED] ")
+                    .append(defaultText(result.getSummary(), "无摘要"));
+            if (hasText(result.getRawData())) {
+                builder.append(" 原始数据：")
+                        .append(truncate(result.getRawData(), 300));
+            }
+            if (!result.isSuccess() && hasText(result.getErrorMessage())) {
+                builder.append(" 错误：")
+                        .append(truncate(result.getErrorMessage(), 160));
+            }
+            builder.append('\n');
+        }
+
+        String text = builder.toString().strip();
+        return hasText(text) ? text : "暂无分支 Agent 结果。";
+    }
+
+    /**
+     * 限制注入 Prompt 的工具原始数据长度。
+     */
+    private static String truncate(String value, int maxLength) {
+        if (!hasText(value) || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength) + "...";
     }
 
     /**
@@ -300,6 +359,9 @@ public class PlanDraftNode {
         }
         if (state != null && (!hasText(state.getTravelTime()) || "未指定".equals(state.getTravelTime()))) {
             draft.getAssumptions().add("用户尚未提供明确出行时间，行程日期需要后续确认。");
+        }
+        if (state != null && state.getDurationDays() == null) {
+            draft.getAssumptions().add("用户尚未提供明确行程天数，本次行程长度需要后续确认。");
         }
     }
 

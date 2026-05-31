@@ -4,6 +4,8 @@ import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.GraphResult;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
+import com.travel.agent.ai.graph.node.BranchDispatchNode;
+import com.travel.agent.ai.graph.node.BranchExecuteNode;
 import com.travel.agent.ai.graph.node.ClarifyQuestionNode;
 import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
@@ -27,8 +29,9 @@ import org.springframework.stereotype.Service;
  * <p>职责：
  * <ul>
  *   <li>作为 Spring AI 外围调度层和后续 LangGraph4j 状态图之间的稳定边界。</li>
- *   <li>串联 Init、RAG、Planner、Validator、Clarify、Finalizer 等节点。</li>
+ *   <li>串联 Init、RAG、Branch、Planner、Validator、Clarify、Finalizer 等节点。</li>
  *   <li>在第二阶段支持“信息不足 -> 追问用户 -> 保存 pending 状态 -> 用户补充后续跑”的闭环。</li>
+ *   <li>在第三阶段支持“核心 Graph 派发分支任务 -> 分支 Agent 调工具 -> 结果回填 Planner”的直线闭环。</li>
  *   <li>统一捕获节点异常，返回 {@link GraphResult} 降级结果，避免 Graph 内部异常穿透到 Web 层。</li>
  * </ul>
  * </p>
@@ -50,6 +53,12 @@ public class LangGraphPlannerFacade {
 
     /** 从私有知识库检索 RAG 上下文的节点。 */
     private final RetrieveKnowledgeNode retrieveKnowledgeNode;
+
+    /** 根据状态生成天气、景点、航班等分支任务的节点。 */
+    private final BranchDispatchNode branchDispatchNode;
+
+    /** 调用分支 Agent 执行任务并回填分支结果的节点。 */
+    private final BranchExecuteNode branchExecuteNode;
 
     /** 调用核心模型生成 PlannerDraft 的节点。 */
     private final PlanDraftNode planDraftNode;
@@ -73,13 +82,15 @@ public class LangGraphPlannerFacade {
     private final ConversationStateStore conversationStateStore;
 
     /**
-     * 构造器注入第二阶段工作流需要的全部节点。
+     * 构造器注入当前规划工作流需要的全部节点。
      *
      * <p>后续迁移到 LangGraph4j {@code StateGraph} 时，对外仍保持 {@link #plan(GraphInputRequest)} 方法不变。</p>
      */
     @Autowired
     public LangGraphPlannerFacade(InitStateNode initStateNode,
                                   RetrieveKnowledgeNode retrieveKnowledgeNode,
+                                  BranchDispatchNode branchDispatchNode,
+                                  BranchExecuteNode branchExecuteNode,
                                   PlanDraftNode planDraftNode,
                                   ValidateDraftNode validateDraftNode,
                                   ClarifyQuestionNode clarifyQuestionNode,
@@ -89,6 +100,8 @@ public class LangGraphPlannerFacade {
                                   ConversationStateStore conversationStateStore) {
         this.initStateNode = initStateNode;
         this.retrieveKnowledgeNode = retrieveKnowledgeNode;
+        this.branchDispatchNode = branchDispatchNode;
+        this.branchExecuteNode = branchExecuteNode;
         this.planDraftNode = planDraftNode;
         this.validateDraftNode = validateDraftNode;
         this.clarifyQuestionNode = clarifyQuestionNode;
@@ -110,6 +123,8 @@ public class LangGraphPlannerFacade {
                            FinalizeAnswerNode finalizeAnswerNode) {
         this(initStateNode,
                 retrieveKnowledgeNode,
+                null,
+                null,
                 planDraftNode,
                 validateDraftNode,
                 new ClarifyQuestionNode(),
@@ -120,13 +135,13 @@ public class LangGraphPlannerFacade {
     }
 
     /**
-     * 执行第二阶段旅行规划工作流。
+     * 执行支持澄清和分支 Agent 的旅行规划工作流。
      *
      * <p>处理流程：</p>
      * <ol>
      *   <li>根据 sessionId 查询是否存在上一轮 pending 状态。</li>
      *   <li>存在 pending 状态时，把当前用户输入合并进旧任务；否则初始化新状态。</li>
-     *   <li>执行 RAG、Planner、Validator。</li>
+     *   <li>执行 RAG、BranchDispatch、BranchExecute、Planner、Validator。</li>
      *   <li>如果 Validator 标记需要澄清，则生成追问并保存 pending 状态。</li>
      *   <li>如果信息足够，则进入 Finalizer 输出最终答案，并清理 pending 状态。</li>
      * </ol>
@@ -161,6 +176,7 @@ public class LangGraphPlannerFacade {
             }
 
             state = retrieveKnowledgeNode.retrieve(state);
+            state = runBranchWorkflow(state);
             state = planDraftNode.plan(state);
             state = validateDraftNode.validate(state);
 
@@ -193,6 +209,20 @@ public class LangGraphPlannerFacade {
             log.debug("[Graph] workflow failure detail", e);
             return GraphResult.failure(FAILURE_ANSWER, e.getMessage());
         }
+    }
+
+    /**
+     * 执行第三阶段分支任务流。
+     *
+     * <p>生产环境由 Spring 注入真实 BranchDispatchNode / BranchExecuteNode；
+     * 包内兼容测试构造器不会注入这两个节点，此时保持第一、二阶段旧测试路径不变。</p>
+     */
+    private TravelPlanState runBranchWorkflow(TravelPlanState state) {
+        if (branchDispatchNode == null || branchExecuteNode == null) {
+            return state;
+        }
+        TravelPlanState dispatchedState = branchDispatchNode.dispatch(state);
+        return branchExecuteNode.execute(dispatchedState);
     }
 
     /**

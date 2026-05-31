@@ -19,7 +19,7 @@ class InitStateNodeTest {
     private final InitStateNode node = new InitStateNode();
 
     /**
-     * Gatekeeper 输出完整实体时，节点应把 locations、time、keywords 正确写入状态。
+     * Gatekeeper 输出完整实体时，节点应把 locations、time、duration、keywords 正确写入状态。
      */
     @Test
     void initCopiesGatekeeperEntitiesIntoState() {
@@ -36,8 +36,29 @@ class InitStateNodeTest {
         assertThat(state.getRoute()).isSameAs(route);
         assertThat(state.getDestinations()).containsExactly("法国", "意大利");
         assertThat(state.getTravelTime()).isEqualTo("国庆节");
-        assertThat(state.getKeywords()).containsExactly("10天", "避开人多");
+        assertThat(state.getDurationDays()).isEqualTo(10);
+        assertThat(state.getDurationText()).isEqualTo("10天");
+        assertThat(state.getKeywords()).containsExactly("避开人多");
         assertThat(state.isSuccess()).isFalse();
+    }
+
+    /**
+     * Gatekeeper 把“10天”误放进 time 时，节点应把它归入 duration，并保持 travelTime 未指定。
+     */
+    @Test
+    void initTreatsDurationLikeTimeAsDuration() {
+        GatekeeperResponse route = new GatekeeperResponse();
+        GatekeeperResponse.Entities entities = new GatekeeperResponse.Entities();
+        entities.setLocations(List.of("法国"));
+        entities.setTime("10天");
+        entities.setKeywords(List.of("预算1200欧"));
+        route.setEntities(entities);
+
+        TravelPlanState state = node.init(new GraphInputRequest("法国玩10天", route));
+
+        assertThat(state.getTravelTime()).isEqualTo("未指定");
+        assertThat(state.getDurationDays()).isEqualTo(10);
+        assertThat(state.getDurationText()).isEqualTo("10天");
     }
 
     /**
