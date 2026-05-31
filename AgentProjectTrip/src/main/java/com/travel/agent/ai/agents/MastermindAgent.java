@@ -2,6 +2,9 @@ package com.travel.agent.ai.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.travel.agent.ai.dto.GatekeeperResponse;
+import com.travel.agent.ai.graph.LangGraphPlannerFacade;
+import com.travel.agent.ai.graph.model.GraphInputRequest;
+import com.travel.agent.ai.graph.model.GraphResult;
 import com.travel.agent.ai.tools.FlightTools;
 import com.travel.agent.ai.tools.KnowledgeTools;
 import com.travel.agent.ai.tools.PlacesTools;
@@ -33,7 +36,7 @@ import java.util.List;
  * <p>三擎分工：
  * <pre>
  *   gatekeeperAgent  → DeepSeek Flash  · 意图分类，零成本路由
- *   coreChatClient   → DeepSeek Pro    · PLAN_OR_RAG 高价值规划
+ *   plannerFacade    → DeepSeek Pro    · PLAN_OR_RAG 直线规划工作流
  *   branchChatClient → Qwen 百炼       · TOOL_* 工具调用 / Function Calling
  * </pre>
  */
@@ -53,8 +56,13 @@ public class MastermindAgent {
     // ── 新增字段（三擎编排）────────────────────────────────────────────────────
     private final GatekeeperAgent gatekeeperAgent;
     private final ObjectMapper    objectMapper;
-    /** DeepSeek Pro：用于 PLAN_OR_RAG 高价值行程规划 */
-    private final ChatClient coreChatClient;
+    /**
+     * PLAN_OR_RAG 的第一阶段直线规划黑箱。
+     *
+     * <p>MastermindAgent 只负责路由，不再直接拼接复杂规划 Prompt；
+     * 复杂任务的状态流转、RAG 注入、草案生成和校验均交给 Facade 内部完成。</p>
+     */
+    private final LangGraphPlannerFacade langGraphPlannerFacade;
     /** 阿里百炼 Qwen：用于 TOOL_* 工具调用分支 */
     private final ChatClient branchChatClient;
 
@@ -68,7 +76,7 @@ public class MastermindAgent {
             // 新增依赖
             GatekeeperAgent gatekeeperAgent,
             ObjectMapper objectMapper,
-            @Qualifier("coreChatModel")   ChatModel coreChatModel,
+            LangGraphPlannerFacade langGraphPlannerFacade,
             @Qualifier("branchChatModel") ChatModel branchChatModel) {
 
         // builder 由 @Primary branchChatModel 驱动
@@ -80,8 +88,9 @@ public class MastermindAgent {
 
         this.gatekeeperAgent  = gatekeeperAgent;
         this.objectMapper     = objectMapper;
-        // 为 core / branch 分别构建独立 ChatClient，与 builder 驱动的 chatClient 相互隔离
-        this.coreChatClient   = ChatClient.create(coreChatModel);
+        // PLAN_OR_RAG 进入 graph 黑箱，保持 MastermindAgent 的职责聚焦在路由和降级
+        this.langGraphPlannerFacade = langGraphPlannerFacade;
+        // 为 branch 构建独立 ChatClient，与 builder 驱动的 chatClient 相互隔离
         this.branchChatClient = ChatClient.create(branchChatModel);
     }
 
@@ -105,6 +114,17 @@ public class MastermindAgent {
      * @return 最终自然语言答复
      */
     public String handleUserWorkflow(String userMessage) {
+        return handleUserWorkflow(userMessage, null);
+    }
+
+    /**
+     * 完整的多智能体工作流入口，支持通过 sessionId 续跑上一轮需要澄清的规划任务。
+     *
+     * @param userMessage 用户自然语言输入
+     * @param sessionId   当前会话 ID，可为空
+     * @return 最终自然语言答复
+     */
+    public String handleUserWorkflow(String userMessage, String sessionId) {
         if (userMessage == null || userMessage.isBlank()) {
             return "您好！请问有什么旅行计划我可以帮您？";
         }
@@ -124,16 +144,18 @@ public class MastermindAgent {
         }
 
         String intent = route.getIntent() != null ? route.getIntent().toUpperCase() : "DIRECT_CHAT";
+        intent = normalizeIntent(intent, userMessage);
+        route.setIntent(intent);
         GatekeeperResponse.Entities entities = route.getEntities();
 
         // ── Step 3：按意图分发 ────────────────────────────────────────────────
         return switch (intent) {
             case "DIRECT_CHAT" -> buildDirectChatReply();
             case "TOOL_WEATHER", "TOOL_FLIGHT" -> handleToolBranch(intent, entities, userMessage);
-            case "PLAN_OR_RAG" -> handlePlanOrRag(entities, userMessage);
+            case "PLAN_OR_RAG" -> handlePlanOrRag(route, userMessage, sessionId);
             default -> {
                 log.warn("[Mastermind] Unknown intent '{}', defaulting to PLAN_OR_RAG.", intent);
-                yield handlePlanOrRag(entities, userMessage);
+                yield handlePlanOrRag(route, userMessage, sessionId);
             }
         };
     }
@@ -199,64 +221,101 @@ public class MastermindAgent {
 
         log.info("[Mastermind] Routing to TOOL branch: type={}, locations={}", toolType, locationStr);
 
-        try {
-            return branchChatClient.prompt()
-                    .system("你是一位欧洲旅行信息查询助手，用简洁友好的中文回复用户的" + toolType + "查询需求。" +
-                            "目前工具链正在接入中，请先礼貌地告知用户已收到请求，并给出你所了解的" +
-                            toolType + "相关建议或注意事项。")
-                    .user(userMessage)
-                    .call()
-                    .content();
-        } catch (Exception e) {
-            log.error("[Mastermind] TOOL branch call failed for intent={}: {}", intent, e.getMessage());
-            return "收到您关于【" + locationStr + "】的" + toolType + "查询请求。工具链正在升级中，" +
-                   "请稍后重试，或改为询问我行程规划方面的问题 😊";
-        }
+        return "收到您关于【" + locationStr + "】的" + toolType + "查询请求。第一阶段已优先搭好复杂行程规划直线流程，" +
+               "天气和航班工具分支会在下一阶段接入。您也可以把需求描述成完整行程规划，我会进入规划流程。";
     }
 
     /**
-     * PLAN_OR_RAG 分支：调用 coreChatClient（DeepSeek Pro），注入地点与时间上下文。
-     * 后续 RAG 知识库接入后，此处将加入 KnowledgeTools 检索结果作为上下文。
+     * PLAN_OR_RAG 分支：进入第一阶段直线规划黑箱。
+     *
+     * <p>处理流程：
+     * <ol>
+     *   <li>将用户原始输入和完整 Gatekeeper 路由结果打包为 {@link GraphInputRequest}。</li>
+     *   <li>调用 {@link LangGraphPlannerFacade} 执行 Init → RAG → Planner → Validator → Finalizer。</li>
+     *   <li>成功时返回 Graph 生成的 Markdown 答案。</li>
+     *   <li>失败时优先返回 GraphResult 中的降级答案，避免 Web 层收到空响应。</li>
+     * </ol>
+     * </p>
+     *
+     * @param route       Gatekeeper 完整路由结果
+     * @param userMessage 用户原始自然语言输入
+     * @return 最终用户可读回复
      */
-    private String handlePlanOrRag(GatekeeperResponse.Entities entities,
-                                   String userMessage) {
-        String currentDate = LocalDate.now().toString();
+    private String handlePlanOrRag(GatekeeperResponse route, String userMessage, String sessionId) {
+        log.info("[Mastermind] Routing to PLAN_OR_RAG linear graph workflow.");
 
-        List<String> locations = entities != null && entities.getLocations() != null
-                ? entities.getLocations()
-                : Collections.emptyList();
-        String time = entities != null && entities.getTime() != null
-                ? entities.getTime()
-                : "未指定";
-        List<String> keywords = entities != null && entities.getKeywords() != null
-                ? entities.getKeywords()
-                : Collections.emptyList();
+        // GraphInputRequest 是 Spring AI 外围层进入 Graph 黑箱的稳定边界协议
+        GraphInputRequest request = new GraphInputRequest(userMessage, route, sessionId);
+        GraphResult result = langGraphPlannerFacade.plan(request);
 
-        String locationStr = locations.isEmpty() ? "欧洲（法意瑞方向）" : String.join("、", locations);
-        String keywordStr  = keywords.isEmpty()  ? "无"               : String.join("、", keywords);
-
-        log.info("[Mastermind] Routing to PLAN_OR_RAG (DeepSeek Pro): locations={}, time={}", locationStr, time);
-
-        String systemPrompt =
-                "你是一位深度专注于法国、意大利、瑞士三国旅游的高级规划专家，拥有丰富的实地经验和防坑知识。\n" +
-                "用户的旅行意图已由前置网关识别，核心信息如下：\n" +
-                "  - 目的地：" + locationStr + "\n" +
-                "  - 出行时间：" + time + "\n" +
-                "  - 关键诉求：" + keywordStr + "\n" +
-                "  - 当前系统日期：" + currentDate + "\n\n" +
-                "请充分展示你的统筹规划能力，给出专业、具体、接地气的旅行建议。" +
-                "如涉及行程，请给出分天日程；如涉及防坑，请列出具体注意事项。" +
-                "语气亲切，内容丰富，不要泛泛而谈。";
-
-        try {
-            return coreChatClient.prompt()
-                    .system(systemPrompt)
-                    .user(userMessage)
-                    .call()
-                    .content();
-        } catch (Exception e) {
-            log.error("[Mastermind] PLAN_OR_RAG (DeepSeek Pro) call failed: {}", e.getMessage());
-            return "抱歉，规划引擎暂时遇到了一点问题。请稍后重试，或者您可以先告诉我更多具体的旅行需求 🙏";
+        // Graph 成功时直接透传最终 Markdown；Mastermind 不再二次改写复杂规划内容
+        if (result.isSuccess() && hasText(result.getAnswer())) {
+            return result.getAnswer();
         }
+
+        log.error("[Mastermind] PLAN_OR_RAG graph failed: {}", result.getErrorMessage());
+        // Graph 失败但提供了可读降级答案时，仍然优先返回该答案
+        if (hasText(result.getAnswer())) {
+            return result.getAnswer();
+        }
+        return "抱歉，规划流程暂时遇到了一点问题。请稍后重试，或者先补充更多具体旅行需求。";
+    }
+
+    /**
+     * 对 Gatekeeper 的意图结果做轻量确定性纠偏。
+     *
+     * <p>第一阶段测试中，用户说“下个月去欧洲玩，帮我安排”这类开放式规划请求时，
+     * 偶发会被模型误判为 {@code TOOL_FLIGHT}。这里用代码规则兜底：只要用户明显在请求
+     * 安排、规划、行程、攻略，且没有明确提到机票 / 航班 / 天气，就强制进入
+     * {@code PLAN_OR_RAG}。</p>
+     *
+     * @param intent      Gatekeeper 原始意图
+     * @param userMessage 用户原始输入
+     * @return 纠偏后的意图
+     */
+    private String normalizeIntent(String intent, String userMessage) {
+        if (("TOOL_FLIGHT".equals(intent) || "TOOL_WEATHER".equals(intent))
+                && looksLikePlanningRequest(userMessage)
+                && !hasExplicitToolKeyword(userMessage)) {
+            log.info("[Mastermind] Override Gatekeeper intent {} -> PLAN_OR_RAG for planning-like request.", intent);
+            return "PLAN_OR_RAG";
+        }
+        return intent;
+    }
+
+    /**
+     * 判断用户是否在表达开放式旅行规划需求。
+     */
+    private static boolean looksLikePlanningRequest(String message) {
+        if (!hasText(message)) {
+            return false;
+        }
+        return message.contains("规划")
+                || message.contains("安排")
+                || message.contains("行程")
+                || message.contains("攻略")
+                || message.contains("怎么玩")
+                || message.contains("去欧洲玩")
+                || message.contains("旅游");
+    }
+
+    /**
+     * 判断用户是否明确请求某个工具类能力。
+     */
+    private static boolean hasExplicitToolKeyword(String message) {
+        if (!hasText(message)) {
+            return false;
+        }
+        return message.contains("机票")
+                || message.contains("航班")
+                || message.contains("飞")
+                || message.contains("机场")
+                || message.contains("天气")
+                || message.contains("下雨")
+                || message.contains("温度");
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }

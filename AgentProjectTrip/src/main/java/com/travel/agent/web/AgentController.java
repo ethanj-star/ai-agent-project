@@ -52,13 +52,14 @@ public class AgentController {
      * @return 最终自然语言答复；出错时返回 500 + 错误说明
      */
     @GetMapping("/chat")
-    public ResponseEntity<String> chat(@RequestParam String message) {
+    public ResponseEntity<String> chat(@RequestParam String message,
+                                       @RequestParam(required = false) String sessionId) {
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("参数 message 不能为空。");
         }
 
         try {
-            String reply = mastermindAgent.handleUserWorkflow(message);
+            String reply = mastermindAgent.handleUserWorkflow(message, sessionId);
             return ResponseEntity.ok(reply);
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
