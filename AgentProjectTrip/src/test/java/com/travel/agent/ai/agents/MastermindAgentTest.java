@@ -7,7 +7,6 @@ import com.travel.agent.ai.tools.FlightTools;
 import com.travel.agent.ai.tools.KnowledgeTools;
 import com.travel.agent.ai.tools.PlacesTools;
 import com.travel.agent.ai.tools.WeatherTools;
-import com.travel.agent.core.GatekeeperAgent;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
@@ -28,6 +27,40 @@ import static org.mockito.Mockito.when;
  * 第一阶段直线规划黑箱，而不是继续走旧的一次性核心模型回答。</p>
  */
 class MastermindAgentTest {
+
+    /**
+     * 验证 DIRECT_CHAT 会优先返回 Gatekeeper 已经生成的 direct_reply，而不是覆盖成固定欢迎语。
+     */
+    @Test
+    void directChatReturnsGatekeeperDirectReply() {
+        ChatClient.Builder builder = mock(ChatClient.Builder.class);
+        when(builder.build()).thenReturn(mock(ChatClient.class));
+
+        GatekeeperAgent gatekeeperAgent = mock(GatekeeperAgent.class);
+        LangGraphPlannerFacade plannerFacade = mock(LangGraphPlannerFacade.class);
+        ChatModel branchChatModel = mock(ChatModel.class);
+
+        MastermindAgent agent = new MastermindAgent(
+                builder,
+                mock(FlightTools.class),
+                mock(WeatherTools.class),
+                mock(PlacesTools.class),
+                mock(KnowledgeTools.class),
+                gatekeeperAgent,
+                new ObjectMapper(),
+                plannerFacade,
+                branchChatModel);
+
+        when(gatekeeperAgent.routeRequest("欧洲有几个国家？"))
+                .thenReturn("""
+                        {"intent":"DIRECT_CHAT","entities":{"locations":[],"time":null,"keywords":["欧洲","国家数量"]},"direct_reply":"欧洲目前通常按44个主权国家来统计。"}
+                        """);
+
+        String answer = agent.handleUserWorkflow("欧洲有几个国家？");
+
+        assertThat(answer).isEqualTo("欧洲目前通常按44个主权国家来统计。");
+        verify(plannerFacade, never()).plan(any());
+    }
 
     /**
      * 验证复杂规划意图会调用 LangGraphPlannerFacade。

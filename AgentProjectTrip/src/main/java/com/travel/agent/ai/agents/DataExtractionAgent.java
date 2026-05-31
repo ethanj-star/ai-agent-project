@@ -1,4 +1,4 @@
-package com.travel.agent.core.etl;
+package com.travel.agent.ai.agents;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

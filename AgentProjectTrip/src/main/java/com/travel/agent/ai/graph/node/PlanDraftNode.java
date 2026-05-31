@@ -1,6 +1,7 @@
 package com.travel.agent.ai.graph.node;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.travel.agent.ai.AiModelBeanNames;
 import com.travel.agent.ai.graph.model.PlannerDraft;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import org.slf4j.Logger;
@@ -50,7 +51,7 @@ public class PlanDraftNode {
      * @param objectMapper  JSON 解析器
      */
     @Autowired
-    public PlanDraftNode(@Qualifier("coreChatModel") ChatModel coreChatModel,
+    public PlanDraftNode(@Qualifier(AiModelBeanNames.CORE_CHAT_MODEL) ChatModel coreChatModel,
                          ObjectMapper objectMapper) {
         this(ChatClient.create(coreChatModel), objectMapper);
     }

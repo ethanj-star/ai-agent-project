@@ -1,5 +1,6 @@
-package com.travel.agent.config;
+package com.travel.agent.ai.config;
 
+import com.travel.agent.ai.AiModelBeanNames;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.openai.OpenAiChatModel;
@@ -63,7 +64,7 @@ public class MultiModelConfig {
      * DeepSeek Flash：极速、极稳，专用于 Gatekeeper 意图识别。
      * Temperature=0.0，MaxTokens=512，只输出 JSON 路由指令。
      */
-    @Bean(name = "gatekeeperChatModel")
+    @Bean(name = AiModelBeanNames.GATEKEEPER_CHAT_MODEL)
     public ChatModel gatekeeperChatModel(RestClient.Builder restClientBuilder) {
         OpenAiApi api = buildOpenAiApi(deepseekBaseUrl, deepseekApiKey, restClientBuilder);
 
@@ -81,7 +82,7 @@ public class MultiModelConfig {
     /**
      * DeepSeek Pro：最强推理，用于多国行程规划与深度问答。
      */
-    @Bean(name = "coreChatModel")
+    @Bean(name = AiModelBeanNames.CORE_CHAT_MODEL)
     public ChatModel coreChatModel(RestClient.Builder restClientBuilder) {
         OpenAiApi api = buildOpenAiApi(deepseekBaseUrl, deepseekApiKey, restClientBuilder);
 
@@ -101,7 +102,7 @@ public class MultiModelConfig {
      * {@link Primary} 使其成为 {@code ChatClient.Builder} 的默认注入源，
      * 兼容 MastermindAgent / DataExtractionAgent。
      */
-    @Bean(name = "branchChatModel")
+    @Bean(name = AiModelBeanNames.BRANCH_CHAT_MODEL)
     @Primary
     public ChatModel branchChatModel(RestClient.Builder restClientBuilder) {
         OpenAiApi api = buildOpenAiApi(bailianBaseUrl, bailianApiKey, restClientBuilder);

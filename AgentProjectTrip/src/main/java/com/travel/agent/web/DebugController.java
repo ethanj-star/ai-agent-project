@@ -1,6 +1,6 @@
-package com.travel.agent.controller;
+package com.travel.agent.web;
 
-import com.travel.agent.core.GatekeeperAgent;
+import com.travel.agent.ai.agents.GatekeeperAgent;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,11 +18,11 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 @RequestMapping("/api/test")
-public class TestController {
+public class DebugController {
 
     private final GatekeeperAgent gatekeeperAgent;
 
-    public TestController(GatekeeperAgent gatekeeperAgent) {
+    public DebugController(GatekeeperAgent gatekeeperAgent) {
         this.gatekeeperAgent = gatekeeperAgent;
     }
 

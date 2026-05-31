@@ -1,5 +1,6 @@
-package com.travel.agent.core;
+package com.travel.agent.ai.agents;
 
+import com.travel.agent.ai.AiModelBeanNames;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -112,10 +113,9 @@ public class GatekeeperAgent {
      * 与系统默认的 {@link org.springframework.context.annotation.Primary}
      * branchChatModel 严格隔离。
      *
-     * @param chatModel 由 {@link com.travel.agent.config.MultiModelConfig} 注册的
-     *                  {@code gatekeeperChatModel} Bean（DeepSeek Flash，Temperature=0.0）
+     * @param chatModel gatekeeperChatModel Bean（DeepSeek Flash，Temperature=0.0）
      */
-    public GatekeeperAgent(@Qualifier("gatekeeperChatModel") ChatModel chatModel) {
+    public GatekeeperAgent(@Qualifier(AiModelBeanNames.GATEKEEPER_CHAT_MODEL) ChatModel chatModel) {
         // 从指定的 ChatModel 实例构建独立的 ChatClient，
         // 避免与系统默认 ChatClient.Builder（branchChatModel）产生任何耦合
         this.chatClient = ChatClient.create(chatModel);

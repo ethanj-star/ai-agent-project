@@ -1,6 +1,6 @@
 package com.travel.agent.web;
 
-import com.travel.agent.core.etl.DataExtractionAgent;
+import com.travel.agent.ai.agents.DataExtractionAgent;
 import com.travel.agent.core.etl.DataPreProcessor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

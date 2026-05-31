@@ -8,7 +8,7 @@ import java.util.List;
 /**
  * Gatekeeper 路由 JSON 的 Java 映射对象。
  *
- * <p>与 {@link com.travel.agent.core.GatekeeperAgent} 输出的 JSON 结构一一对应：
+ * <p>与 {@link com.travel.agent.ai.agents.GatekeeperAgent} 输出的 JSON 结构一一对应：
  * <pre>{@code
  * {
  *   "intent": "PLAN_OR_RAG",
@@ -35,6 +35,10 @@ public class GatekeeperResponse {
     @JsonProperty("entities")
     private Entities entities;
 
+    /** DIRECT_CHAT 场景下，Gatekeeper 低成本模型直接生成的回复文本。 */
+    @JsonProperty("direct_reply")
+    private String directReply;
+
     public String getIntent() {
         return intent;
     }
@@ -49,6 +53,14 @@ public class GatekeeperResponse {
 
     public void setEntities(Entities entities) {
         this.entities = entities;
+    }
+
+    public String getDirectReply() {
+        return directReply;
+    }
+
+    public void setDirectReply(String directReply) {
+        this.directReply = directReply;
     }
 
     // ── 内部类：实体信息 ──────────────────────────────────────────────────────

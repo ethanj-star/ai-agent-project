@@ -1,6 +1,7 @@
 package com.travel.agent.ai.agents;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.travel.agent.ai.AiModelBeanNames;
 import com.travel.agent.ai.dto.GatekeeperResponse;
 import com.travel.agent.ai.graph.LangGraphPlannerFacade;
 import com.travel.agent.ai.graph.model.GraphInputRequest;
@@ -9,7 +10,6 @@ import com.travel.agent.ai.tools.FlightTools;
 import com.travel.agent.ai.tools.KnowledgeTools;
 import com.travel.agent.ai.tools.PlacesTools;
 import com.travel.agent.ai.tools.WeatherTools;
-import com.travel.agent.core.GatekeeperAgent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -77,7 +77,7 @@ public class MastermindAgent {
             GatekeeperAgent gatekeeperAgent,
             ObjectMapper objectMapper,
             LangGraphPlannerFacade langGraphPlannerFacade,
-            @Qualifier("branchChatModel") ChatModel branchChatModel) {
+            @Qualifier(AiModelBeanNames.BRANCH_CHAT_MODEL) ChatModel branchChatModel) {
 
         // builder 由 @Primary branchChatModel 驱动
         this.chatClient     = builder.build();
@@ -150,7 +150,7 @@ public class MastermindAgent {
 
         // ── Step 3：按意图分发 ────────────────────────────────────────────────
         return switch (intent) {
-            case "DIRECT_CHAT" -> buildDirectChatReply();
+            case "DIRECT_CHAT" -> buildDirectChatReply(route);
             case "TOOL_WEATHER", "TOOL_FLIGHT" -> handleToolBranch(intent, entities, userMessage);
             case "PLAN_OR_RAG" -> handlePlanOrRag(route, userMessage, sessionId);
             default -> {
@@ -195,7 +195,20 @@ public class MastermindAgent {
     // ═════════════════════════════════════════════════════════════════════════
 
     /**
-     * DIRECT_CHAT 分支：写死导向性回复，不消耗任何 Token。
+     * DIRECT_CHAT 分支：优先使用 Gatekeeper 已经生成的 direct_reply。
+     *
+     * <p>Gatekeeper 使用低成本 Flash 模型完成闲聊类问题的直接回答。Mastermind 不应覆盖它，
+     * 只有当 direct_reply 缺失或为空时，才返回固定引导语作为兜底。</p>
+     */
+    private static String buildDirectChatReply(GatekeeperResponse route) {
+        if (route != null && hasText(route.getDirectReply())) {
+            return route.getDirectReply().trim();
+        }
+        return buildDirectChatReply();
+    }
+
+    /**
+     * DIRECT_CHAT 兜底导向性回复。
      */
     private static String buildDirectChatReply() {
         return "您好！我是您的全能欧洲旅行管家 ✈️\n" +
