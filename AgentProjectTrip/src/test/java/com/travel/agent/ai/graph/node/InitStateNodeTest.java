@@ -3,8 +3,10 @@ package com.travel.agent.ai.graph.node;
 import com.travel.agent.ai.dto.GatekeeperResponse;
 import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.TravelPlanState;
+import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -71,5 +73,34 @@ class InitStateNodeTest {
         assertThat(state.getDestinations()).isEmpty();
         assertThat(state.getKeywords()).isEmpty();
         assertThat(state.getTravelTime()).isEqualTo("未指定");
+    }
+
+    /**
+     * 第五阶段传入已确认需求表时，节点应优先用 TravelRequirementSpec 初始化状态。
+     */
+    @Test
+    void initUsesRequirementSpecWhenPresent() {
+        TravelRequirementSpec spec = new TravelRequirementSpec();
+        spec.setDestinations(List.of("法国", "意大利"));
+        spec.setStartDateText("国庆");
+        spec.setDurationDays(10);
+        spec.setBudgetAmount(BigDecimal.valueOf(1200));
+        spec.setBudgetCurrency("EUR");
+        spec.setBudgetIncludesInternationalFlight(false);
+        spec.setTravelerCount(2);
+        spec.setDepartureCity("上海");
+        spec.setAvoidances(List.of("避开人多"));
+
+        GraphInputRequest request = new GraphInputRequest("结构化需求生成", new GatekeeperResponse(), "s1");
+        request.setRequirementSpec(spec);
+
+        TravelPlanState state = node.init(request);
+
+        assertThat(state.getRequirementSpec()).isSameAs(spec);
+        assertThat(state.getDestinations()).containsExactly("法国", "意大利");
+        assertThat(state.getTravelTime()).isEqualTo("国庆");
+        assertThat(state.getDurationDays()).isEqualTo(10);
+        assertThat(state.getDurationText()).isEqualTo("10天");
+        assertThat(state.getKeywords()).contains("预算1200EUR", "不含国际机票", "2人", "出发地上海", "避开人多");
     }
 }

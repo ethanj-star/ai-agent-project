@@ -11,6 +11,7 @@ import com.travel.agent.ai.dto.GatekeeperResponse;
  * <ul>
  *   <li>承载用户原始自然语言输入，保证 Planner 节点仍能看到完整上下文。</li>
  *   <li>承载 Gatekeeper 已解析出的结构化路由结果，避免后续节点重复做意图识别。</li>
+ *   <li>第五阶段开始可携带已确认的结构化旅行需求表，作为 Planner 的优先事实来源。</li>
  *   <li>作为 Spring AI 外围层和 Graph 黑箱层之间的稳定边界协议。</li>
  * </ul>
  * </p>
@@ -28,6 +29,9 @@ public class GraphInputRequest {
 
     /** 当前请求是否来自用户对上一轮追问的补充回答。 */
     private boolean resumeMode;
+
+    /** 第五阶段确认后的结构化旅行需求表；为空时保持旧自然语言入口行为。 */
+    private TravelRequirementSpec requirementSpec;
 
     /**
      * Jackson / 测试场景需要的无参构造器。
@@ -89,5 +93,13 @@ public class GraphInputRequest {
 
     public void setResumeMode(boolean resumeMode) {
         this.resumeMode = resumeMode;
+    }
+
+    public TravelRequirementSpec getRequirementSpec() {
+        return requirementSpec;
+    }
+
+    public void setRequirementSpec(TravelRequirementSpec requirementSpec) {
+        this.requirementSpec = requirementSpec;
     }
 }

@@ -6,9 +6,11 @@ import com.travel.agent.ai.graph.model.BranchTask;
 import com.travel.agent.ai.graph.model.BranchTaskType;
 import com.travel.agent.ai.graph.model.PlannerDraft;
 import com.travel.agent.ai.graph.model.TravelPlanState;
+import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,6 +53,36 @@ class PlanDraftNodeTest {
         assertThat(prompt).contains("分支 Agent 结果");
         assertThat(prompt).contains("天气参考：巴黎");
         assertThat(prompt).contains("当前系统日期");
+    }
+
+    /**
+     * 第五阶段确认后的需求表应出现在 Planner Prompt 中，并被标记为优先事实来源。
+     */
+    @Test
+    void buildSystemPromptContainsRequirementSpec() {
+        TravelRequirementSpec spec = new TravelRequirementSpec();
+        spec.setDestinations(List.of("法国", "意大利"));
+        spec.setDepartureCity("上海");
+        spec.setStartDateText("国庆");
+        spec.setDurationDays(10);
+        spec.setTravelerCount(2);
+        spec.setBudgetAmount(BigDecimal.valueOf(1200));
+        spec.setBudgetCurrency("EUR");
+        spec.setBudgetIncludesInternationalFlight(false);
+        spec.setAvoidances(List.of("避开人多"));
+
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("结构化需求生成");
+        state.setRequirementSpec(spec);
+
+        String prompt = node.buildSystemPrompt(state);
+
+        assertThat(prompt).contains("已确认结构化需求表");
+        assertThat(prompt).contains("优先级最高的用户事实来源");
+        assertThat(prompt).contains("目的地：法国、意大利");
+        assertThat(prompt).contains("出发城市：上海");
+        assertThat(prompt).contains("预算：1200EUR");
+        assertThat(prompt).contains("国际机票边界：预算不含国际机票");
     }
 
     /**

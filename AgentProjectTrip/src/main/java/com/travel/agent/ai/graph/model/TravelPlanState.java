@@ -13,7 +13,7 @@ import java.util.List;
  * <p>职责：
  * <ul>
  *   <li>贯穿 Init、RAG、Branch、Planner、Validator、RiskReasoning、Revision、Finalizer 全部节点。</li>
- *   <li>保存用户输入、Gatekeeper 实体、行程时长、RAG 上下文、规划草案、风险审查、校验问题和最终答案。</li>
+ *   <li>保存用户输入、Gatekeeper 实体、结构化需求表、行程时长、RAG 上下文、规划草案、风险审查、校验问题和最终答案。</li>
  *   <li>为第二阶段迁移到 LangGraph4j StateGraph 提供稳定的状态模型。</li>
  * </ul>
  * </p>
@@ -24,6 +24,9 @@ public class TravelPlanState {
 
     /** 用户原始输入，所有后续节点都可以回看完整需求 */
     private String userQuery;
+
+    /** 第五阶段确认后的结构化旅行需求表；存在时它是 Planner 和 RiskReasoning 的优先事实来源。 */
+    private TravelRequirementSpec requirementSpec;
 
     /** Gatekeeper 的完整路由结果，保留 intent 和 entities */
     private GatekeeperResponse route;
@@ -100,6 +103,14 @@ public class TravelPlanState {
 
     public void setUserQuery(String userQuery) {
         this.userQuery = userQuery;
+    }
+
+    public TravelRequirementSpec getRequirementSpec() {
+        return requirementSpec;
+    }
+
+    public void setRequirementSpec(TravelRequirementSpec requirementSpec) {
+        this.requirementSpec = requirementSpec;
     }
 
     public GatekeeperResponse getRoute() {

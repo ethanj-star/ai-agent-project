@@ -3,6 +3,7 @@ package com.travel.agent.ai.graph.node;
 import com.travel.agent.ai.dto.GatekeeperResponse;
 import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.TravelPlanState;
+import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,7 @@ import java.util.List;
  * <ul>
  *   <li>把 MastermindAgent 传入的 {@link GraphInputRequest} 转换为工作流共享状态。</li>
  *   <li>从 Gatekeeper 的 entities 中提取目的地、出行时间、行程时长和关键词。</li>
+ *   <li>第五阶段开始，若请求携带已确认的 {@link TravelRequirementSpec}，则优先按需求表初始化状态。</li>
  *   <li>把“10天”“一周左右”等时长表达写入 duration 字段，避免误当成出发时间。</li>
  *   <li>统一处理 null 和空集合，保证后续节点可以安全读取状态。</li>
  * </ul>
@@ -56,6 +58,11 @@ public class InitStateNode {
         state.setLastUserMessage(request.getUserQuery());
         state.setRoute(request.getRoute());
 
+        if (request.getRequirementSpec() != null) {
+            initFromRequirementSpec(state, request.getRequirementSpec());
+            return state;
+        }
+
         GatekeeperResponse.Entities entities = request.getRoute() == null
                 ? null
                 : request.getRoute().getEntities();
@@ -75,6 +82,71 @@ public class InitStateNode {
         state.setTurnCount(1);
 
         return state;
+    }
+
+    /**
+     * 从第五阶段已确认的结构化需求表初始化状态。
+     *
+     * <p>处理流程：
+     * <ol>
+     *   <li>把 requirementSpec 写入状态，供后续 Planner / RiskReasoning 作为优先事实来源。</li>
+     *   <li>从需求表复制目的地、出行时间、行程时长和偏好关键词。</li>
+     *   <li>保留 GraphInputRequest 中合成的 userQuery，方便 RAG 和日志仍能看到完整需求摘要。</li>
+     * </ol>
+     * </p>
+     */
+    private static void initFromRequirementSpec(TravelPlanState state, TravelRequirementSpec spec) {
+        state.setRequirementSpec(spec);
+        state.setDestinations(safeList(spec.getDestinations()));
+        state.setTravelTime(resolveRequirementTravelTime(spec));
+        state.setDurationDays(spec.getDurationDays());
+        state.setDurationText(spec.getDurationDays() == null ? null : spec.getDurationDays() + "天");
+        state.setKeywords(buildRequirementKeywords(spec));
+        state.setSuccess(false);
+        state.setWorkflowStatus(WorkflowStatus.PLANNING);
+        state.setTurnCount(1);
+    }
+
+    private static String resolveRequirementTravelTime(TravelRequirementSpec spec) {
+        if (spec == null) {
+            return "未指定";
+        }
+        if (hasText(spec.getStartDateText())) {
+            return spec.getStartDateText().trim();
+        }
+        return spec.getStartDate() == null ? "未指定" : spec.getStartDate().toString();
+    }
+
+    private static List<String> buildRequirementKeywords(TravelRequirementSpec spec) {
+        List<String> keywords = new ArrayList<>();
+        if (spec == null) {
+            return keywords;
+        }
+        if (spec.getBudgetAmount() != null) {
+            keywords.add("预算" + spec.getBudgetAmount().stripTrailingZeros().toPlainString()
+                    + defaultText(spec.getBudgetCurrency(), ""));
+        }
+        if (spec.getBudgetIncludesInternationalFlight() != null) {
+            keywords.add(spec.getBudgetIncludesInternationalFlight() ? "包含国际机票" : "不含国际机票");
+        }
+        if (spec.getTravelerCount() != null) {
+            keywords.add(spec.getTravelerCount() + "人");
+        }
+        if (hasText(spec.getDepartureCity())) {
+            keywords.add("出发地" + spec.getDepartureCity().trim());
+        }
+        keywords.addAll(safeList(spec.getPreferences()));
+        keywords.addAll(safeList(spec.getAvoidances()));
+        if (hasText(spec.getTravelStyle())) {
+            keywords.add(spec.getTravelStyle().trim());
+        }
+        if (hasText(spec.getAccommodationPreference())) {
+            keywords.add(spec.getAccommodationPreference().trim());
+        }
+        if (hasText(spec.getTransportPreference())) {
+            keywords.add(spec.getTransportPreference().trim());
+        }
+        return keywords;
     }
 
     /**
@@ -115,5 +187,9 @@ public class InitStateNode {
      */
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static String defaultText(String value, String fallback) {
+        return hasText(value) ? value : fallback;
     }
 }
