@@ -1,6 +1,8 @@
 package com.travel.agent.ai.graph.node;
 
 import com.travel.agent.ai.graph.model.PlannerDraft;
+import com.travel.agent.ai.graph.model.RiskAssessment;
+import com.travel.agent.ai.graph.model.RiskIssue;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.ValidationIssue;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
@@ -17,6 +19,7 @@ import java.util.List;
  * <ul>
  *   <li>把 {@link PlannerDraft} 中的结构化字段拼装成用户可读的 Markdown。</li>
  *   <li>展示 Graph 已确认的目的地、出行时间和行程时长，减少用户误解。</li>
+ *   <li>展示第四阶段风险审查和自动修正结果，但不暴露模型隐藏思维链。</li>
  *   <li>把 Validator 输出的问题显式展示给用户，避免系统假装信息完整。</li>
  *   <li>在草案缺失时输出友好降级文本，保证 API 始终有可读响应。</li>
  * </ul>
@@ -34,6 +37,7 @@ public class FinalizeAnswerNode {
      * <ol>
      *   <li>检查状态和 draft 是否存在；缺失时写入降级回复。</li>
      *   <li>按固定章节拼装标题、总体思路、推荐行程、预算提醒和风险提醒。</li>
+     *   <li>追加系统审查与修正说明，让用户知道方案是否经过自动复核。</li>
      *   <li>追加当前假设和校验问题，让用户知道哪些信息仍需确认。</li>
      *   <li>写入 finalAnswer，并标记状态成功。</li>
      * </ol>
@@ -69,6 +73,7 @@ public class FinalizeAnswerNode {
         appendSection(answer, "预算与预订提醒", draft.getBudgetNotes());
         appendSection(answer, "防坑与风险提醒", draft.getRiskNotes());
         appendKnownPlanningInfo(answer, state);
+        appendRiskAssessment(answer, state);
         appendAssumptions(answer, draft.getAssumptions());
         appendValidationIssues(answer, state.getValidationIssues());
 
@@ -76,6 +81,45 @@ public class FinalizeAnswerNode {
         state.setSuccess(true);
         state.setWorkflowStatus(WorkflowStatus.COMPLETED);
         return state;
+    }
+
+    /**
+     * 输出第四阶段风险审查结果。
+     *
+     * <p>这里只展示结论和修正摘要，不输出模型内部推理过程。</p>
+     */
+    private static void appendRiskAssessment(StringBuilder answer, TravelPlanState state) {
+        if (state == null || state.getRiskAssessment() == null) {
+            return;
+        }
+
+        RiskAssessment assessment = state.getRiskAssessment();
+        answer.append("## 系统审查与修正说明\n");
+        if (state.getRevisionCount() > 0) {
+            answer.append("- 已完成 ").append(state.getRevisionCount()).append(" 次自动修正。\n");
+        } else {
+            answer.append("- 已完成输出前风险审查，未触发自动重写。\n");
+        }
+
+        if (assessment.getIssues() == null || assessment.getIssues().isEmpty()) {
+            answer.append("- 未发现明显违反用户约束的高风险问题。\n\n");
+            return;
+        }
+
+        for (RiskIssue issue : assessment.getIssues()) {
+            if (issue == null || !hasText(issue.getMessage())) {
+                continue;
+            }
+            answer.append("- [")
+                    .append(issue.getSeverity() == null ? "INFO" : issue.getSeverity())
+                    .append("] ")
+                    .append(issue.getMessage().trim());
+            if (hasText(issue.getSuggestedAction()) && issue.isAutoRevisable()) {
+                answer.append(" 修正方向：").append(issue.getSuggestedAction().trim());
+            }
+            answer.append("\n");
+        }
+        answer.append("\n");
     }
 
     /**

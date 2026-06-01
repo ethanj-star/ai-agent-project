@@ -55,6 +55,8 @@ public class MergeClarificationNode {
         state.setValidationIssues(new ArrayList<>());
         state.setBranchTasks(new ArrayList<>());
         state.setBranchResults(new ArrayList<>());
+        state.setRiskAssessment(null);
+        state.setRevisionCount(0);
         state.setDraft(null);
         state.setFinalAnswer(null);
         state.setErrorMessage(null);

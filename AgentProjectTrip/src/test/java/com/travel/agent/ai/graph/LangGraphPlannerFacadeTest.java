@@ -3,6 +3,10 @@ package com.travel.agent.ai.graph;
 import com.travel.agent.ai.dto.GatekeeperResponse;
 import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.GraphResult;
+import com.travel.agent.ai.graph.model.RiskAssessment;
+import com.travel.agent.ai.graph.model.RiskIssue;
+import com.travel.agent.ai.graph.model.RiskIssueType;
+import com.travel.agent.ai.graph.model.RiskSeverity;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.ValidationIssue;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
@@ -13,8 +17,10 @@ import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
 import com.travel.agent.ai.graph.node.MergeClarificationNode;
 import com.travel.agent.ai.graph.node.PlanDraftNode;
+import com.travel.agent.ai.graph.node.PlanRevisionNode;
 import com.travel.agent.ai.graph.node.PreClarifyCheckNode;
 import com.travel.agent.ai.graph.node.RetrieveKnowledgeNode;
+import com.travel.agent.ai.graph.node.TripRiskReasoningNode;
 import com.travel.agent.ai.graph.node.ValidateDraftNode;
 import com.travel.agent.ai.graph.store.InMemoryConversationStateStore;
 import org.junit.jupiter.api.Test;
@@ -27,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -258,6 +265,87 @@ class LangGraphPlannerFacadeTest {
         order.verify(plan).plan(state);
         order.verify(validate).validate(state);
         order.verify(finalize).finish(state);
+    }
+
+    /**
+     * 验证风险审查发现可自动修正问题时，Facade 会调用 PlanRevisionNode，并进行二次校验和审查。
+     */
+    @Test
+    void planRunsRevisionWhenRiskAssessmentNeedsRevision() {
+        InitStateNode init = mock(InitStateNode.class);
+        RetrieveKnowledgeNode retrieve = mock(RetrieveKnowledgeNode.class);
+        BranchDispatchNode branchDispatch = mock(BranchDispatchNode.class);
+        BranchExecuteNode branchExecute = mock(BranchExecuteNode.class);
+        PlanDraftNode plan = mock(PlanDraftNode.class);
+        ValidateDraftNode validate = mock(ValidateDraftNode.class);
+        TripRiskReasoningNode risk = mock(TripRiskReasoningNode.class);
+        PlanRevisionNode revision = mock(PlanRevisionNode.class);
+        FinalizeAnswerNode finalize = mock(FinalizeAnswerNode.class);
+        PreClarifyCheckNode precheck = mock(PreClarifyCheckNode.class);
+        InMemoryConversationStateStore store = new InMemoryConversationStateStore();
+
+        GraphInputRequest request = new GraphInputRequest();
+        request.setSessionId("revision-s1");
+        TravelPlanState state = new TravelPlanState();
+        TravelPlanState finalState = new TravelPlanState();
+        finalState.setSuccess(true);
+        finalState.setFinalAnswer("revision final answer");
+        finalState.setValidationIssues(List.of());
+
+        RiskIssue issue = RiskIssue.autoRevisable(
+                RiskIssueType.CROWD_CONFLICT,
+                RiskSeverity.HIGH,
+                "CROWD_CONFLICT",
+                "热门景点过多",
+                "草案包含多个高人流点",
+                "减少热门景点");
+        RiskAssessment risky = new RiskAssessment(true, false, List.of(issue), "减少热门景点");
+        RiskAssessment clear = RiskAssessment.clear();
+
+        when(init.init(request)).thenReturn(state);
+        when(precheck.check(state)).thenReturn(state);
+        when(retrieve.retrieve(state)).thenReturn(state);
+        when(branchDispatch.dispatch(state)).thenReturn(state);
+        when(branchExecute.execute(state)).thenReturn(state);
+        when(plan.plan(state)).thenReturn(state);
+        when(validate.validate(state)).thenReturn(state);
+        when(risk.assess(state))
+                .thenAnswer(invocation -> {
+                    state.setRiskAssessment(risky);
+                    return state;
+                })
+                .thenAnswer(invocation -> {
+                    state.setRiskAssessment(clear);
+                    return state;
+                });
+        when(revision.revise(state)).thenAnswer(invocation -> {
+            state.setRevisionCount(1);
+            return state;
+        });
+        when(finalize.finish(state)).thenReturn(finalState);
+
+        LangGraphPlannerFacade facade = new LangGraphPlannerFacade(
+                init,
+                retrieve,
+                branchDispatch,
+                branchExecute,
+                plan,
+                validate,
+                risk,
+                revision,
+                new ClarifyQuestionNode(),
+                new MergeClarificationNode(),
+                precheck,
+                finalize,
+                store);
+
+        GraphResult result = facade.plan(request);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getAnswer()).isEqualTo("revision final answer");
+        verify(revision).revise(state);
+        verify(validate, times(2)).validate(state);
+        verify(risk, times(2)).assess(state);
     }
 
     /**

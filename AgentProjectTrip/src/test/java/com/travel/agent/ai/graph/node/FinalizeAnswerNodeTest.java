@@ -1,6 +1,10 @@
 package com.travel.agent.ai.graph.node;
 
 import com.travel.agent.ai.graph.model.PlannerDraft;
+import com.travel.agent.ai.graph.model.RiskAssessment;
+import com.travel.agent.ai.graph.model.RiskIssue;
+import com.travel.agent.ai.graph.model.RiskIssueType;
+import com.travel.agent.ai.graph.model.RiskSeverity;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.ValidationIssue;
 import org.junit.jupiter.api.Test;
@@ -36,6 +40,16 @@ class FinalizeAnswerNodeTest {
         state.setDestinations(List.of("法国", "意大利"));
         state.setDurationDays(10);
         state.setDurationText("10天");
+        state.setRevisionCount(1);
+        state.setRiskAssessment(new RiskAssessment(true, false, List.of(
+                RiskIssue.autoRevisable(
+                        RiskIssueType.CROWD_CONFLICT,
+                        RiskSeverity.HIGH,
+                        "CROWD_CONFLICT",
+                        "用户要求避开人多，但草案包含热门景点。",
+                        "热门景点命中",
+                        "减少热门景点密度。")
+        ), "减少热门景点密度。"));
         state.setValidationIssues(List.of(
                 ValidationIssue.medium("MISSING_DATE", "用户没有提供明确出行时间。")));
 
@@ -46,6 +60,8 @@ class FinalizeAnswerNodeTest {
         assertThat(result.getFinalAnswer()).contains("## 推荐行程");
         assertThat(result.getFinalAnswer()).contains("## 已确认信息");
         assertThat(result.getFinalAnswer()).contains("行程时长：10天");
+        assertThat(result.getFinalAnswer()).contains("## 系统审查与修正说明");
+        assertThat(result.getFinalAnswer()).contains("已完成 1 次自动修正");
         assertThat(result.getFinalAnswer()).contains("需要确认或注意的信息");
         assertThat(result.getFinalAnswer()).contains("用户没有提供明确出行时间。");
     }

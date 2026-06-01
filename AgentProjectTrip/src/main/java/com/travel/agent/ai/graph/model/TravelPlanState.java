@@ -12,8 +12,8 @@ import java.util.List;
  *
  * <p>职责：
  * <ul>
- *   <li>贯穿 Init、RAG、Planner、Validator、Finalizer 全部节点。</li>
- *   <li>保存用户输入、Gatekeeper 实体、行程时长、RAG 上下文、规划草案、校验问题和最终答案。</li>
+ *   <li>贯穿 Init、RAG、Branch、Planner、Validator、RiskReasoning、Revision、Finalizer 全部节点。</li>
+ *   <li>保存用户输入、Gatekeeper 实体、行程时长、RAG 上下文、规划草案、风险审查、校验问题和最终答案。</li>
  *   <li>为第二阶段迁移到 LangGraph4j StateGraph 提供稳定的状态模型。</li>
  * </ul>
  * </p>
@@ -84,6 +84,15 @@ public class TravelPlanState {
 
     /** 第三阶段由 BranchExecuteNode 写入的分支执行结果。 */
     private List<BranchResult> branchResults = new ArrayList<>();
+
+    /** 第四阶段风险推理节点输出的结构化审查结果。 */
+    private RiskAssessment riskAssessment;
+
+    /** 当前已经执行过的自动修正次数。 */
+    private int revisionCount;
+
+    /** 单次规划最多允许自动修正次数，避免 revision 循环失控。 */
+    private int maxRevisionCount = 1;
 
     public String getUserQuery() {
         return userQuery;
@@ -251,5 +260,29 @@ public class TravelPlanState {
 
     public void setBranchResults(List<BranchResult> branchResults) {
         this.branchResults = branchResults == null ? new ArrayList<>() : branchResults;
+    }
+
+    public RiskAssessment getRiskAssessment() {
+        return riskAssessment;
+    }
+
+    public void setRiskAssessment(RiskAssessment riskAssessment) {
+        this.riskAssessment = riskAssessment;
+    }
+
+    public int getRevisionCount() {
+        return revisionCount;
+    }
+
+    public void setRevisionCount(int revisionCount) {
+        this.revisionCount = Math.max(0, revisionCount);
+    }
+
+    public int getMaxRevisionCount() {
+        return maxRevisionCount;
+    }
+
+    public void setMaxRevisionCount(int maxRevisionCount) {
+        this.maxRevisionCount = Math.max(0, maxRevisionCount);
     }
 }

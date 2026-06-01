@@ -2,7 +2,9 @@ package com.travel.agent.ai.graph;
 
 import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.GraphResult;
+import com.travel.agent.ai.graph.model.RiskIssue;
 import com.travel.agent.ai.graph.model.TravelPlanState;
+import com.travel.agent.ai.graph.model.ValidationIssue;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
 import com.travel.agent.ai.graph.node.BranchDispatchNode;
 import com.travel.agent.ai.graph.node.BranchExecuteNode;
@@ -11,8 +13,10 @@ import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
 import com.travel.agent.ai.graph.node.MergeClarificationNode;
 import com.travel.agent.ai.graph.node.PlanDraftNode;
+import com.travel.agent.ai.graph.node.PlanRevisionNode;
 import com.travel.agent.ai.graph.node.PreClarifyCheckNode;
 import com.travel.agent.ai.graph.node.RetrieveKnowledgeNode;
+import com.travel.agent.ai.graph.node.TripRiskReasoningNode;
 import com.travel.agent.ai.graph.node.ValidateDraftNode;
 import com.travel.agent.ai.graph.store.ConversationStateStore;
 import com.travel.agent.ai.graph.store.InMemoryConversationStateStore;
@@ -20,6 +24,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 旅行规划 Graph 工作流门面。
@@ -32,6 +39,7 @@ import org.springframework.stereotype.Service;
  *   <li>串联 Init、RAG、Branch、Planner、Validator、Clarify、Finalizer 等节点。</li>
  *   <li>在第二阶段支持“信息不足 -> 追问用户 -> 保存 pending 状态 -> 用户补充后续跑”的闭环。</li>
  *   <li>在第三阶段支持“核心 Graph 派发分支任务 -> 分支 Agent 调工具 -> 结果回填 Planner”的直线闭环。</li>
+ *   <li>在第四阶段支持“Planner -> RiskReasoning -> Revision -> Finalizer”的自动修正闭环。</li>
  *   <li>统一捕获节点异常，返回 {@link GraphResult} 降级结果，避免 Graph 内部异常穿透到 Web 层。</li>
  * </ul>
  * </p>
@@ -66,6 +74,12 @@ public class LangGraphPlannerFacade {
     /** 基于规则校验草案质量和信息缺口的节点。 */
     private final ValidateDraftNode validateDraftNode;
 
+    /** 输出前综合审查草案风险和用户约束冲突的节点。 */
+    private final TripRiskReasoningNode tripRiskReasoningNode;
+
+    /** 根据风险审查结果自动重写草案的节点。 */
+    private final PlanRevisionNode planRevisionNode;
+
     /** 将阻塞性缺口转换成用户追问的节点。 */
     private final ClarifyQuestionNode clarifyQuestionNode;
 
@@ -93,6 +107,8 @@ public class LangGraphPlannerFacade {
                                   BranchExecuteNode branchExecuteNode,
                                   PlanDraftNode planDraftNode,
                                   ValidateDraftNode validateDraftNode,
+                                  TripRiskReasoningNode tripRiskReasoningNode,
+                                  PlanRevisionNode planRevisionNode,
                                   ClarifyQuestionNode clarifyQuestionNode,
                                   MergeClarificationNode mergeClarificationNode,
                                   PreClarifyCheckNode preClarifyCheckNode,
@@ -104,6 +120,8 @@ public class LangGraphPlannerFacade {
         this.branchExecuteNode = branchExecuteNode;
         this.planDraftNode = planDraftNode;
         this.validateDraftNode = validateDraftNode;
+        this.tripRiskReasoningNode = tripRiskReasoningNode;
+        this.planRevisionNode = planRevisionNode;
         this.clarifyQuestionNode = clarifyQuestionNode;
         this.mergeClarificationNode = mergeClarificationNode;
         this.preClarifyCheckNode = preClarifyCheckNode;
@@ -127,11 +145,44 @@ public class LangGraphPlannerFacade {
                 null,
                 planDraftNode,
                 validateDraftNode,
+                null,
+                null,
                 new ClarifyQuestionNode(),
                 new MergeClarificationNode(),
                 new PreClarifyCheckNode(),
                 finalizeAnswerNode,
                 new InMemoryConversationStateStore());
+    }
+
+    /**
+     * 测试兼容构造器。
+     *
+     * <p>保留第二、三阶段测试中手动传入全部基础节点的构造方式；风险审查和自动修正节点为空时，流程保持旧行为。</p>
+     */
+    LangGraphPlannerFacade(InitStateNode initStateNode,
+                           RetrieveKnowledgeNode retrieveKnowledgeNode,
+                           BranchDispatchNode branchDispatchNode,
+                           BranchExecuteNode branchExecuteNode,
+                           PlanDraftNode planDraftNode,
+                           ValidateDraftNode validateDraftNode,
+                           ClarifyQuestionNode clarifyQuestionNode,
+                           MergeClarificationNode mergeClarificationNode,
+                           PreClarifyCheckNode preClarifyCheckNode,
+                           FinalizeAnswerNode finalizeAnswerNode,
+                           ConversationStateStore conversationStateStore) {
+        this(initStateNode,
+                retrieveKnowledgeNode,
+                branchDispatchNode,
+                branchExecuteNode,
+                planDraftNode,
+                validateDraftNode,
+                null,
+                null,
+                clarifyQuestionNode,
+                mergeClarificationNode,
+                preClarifyCheckNode,
+                finalizeAnswerNode,
+                conversationStateStore);
     }
 
     /**
@@ -141,8 +192,9 @@ public class LangGraphPlannerFacade {
      * <ol>
      *   <li>根据 sessionId 查询是否存在上一轮 pending 状态。</li>
      *   <li>存在 pending 状态时，把当前用户输入合并进旧任务；否则初始化新状态。</li>
-     *   <li>执行 RAG、BranchDispatch、BranchExecute、Planner、Validator。</li>
+     *   <li>执行 RAG、BranchDispatch、BranchExecute、Planner、Validator、RiskReasoning。</li>
      *   <li>如果 Validator 标记需要澄清，则生成追问并保存 pending 状态。</li>
+     *   <li>如果风险审查发现可自动修正问题，进入 PlanRevision 后二次校验和审查。</li>
      *   <li>如果信息足够，则进入 Finalizer 输出最终答案，并清理 pending 状态。</li>
      * </ol>
      *
@@ -181,12 +233,13 @@ public class LangGraphPlannerFacade {
             state = validateDraftNode.validate(state);
 
             if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
-                state = clarifyQuestionNode.ask(state);
-                conversationStateStore.savePendingState(sessionId, state);
-                log.info("[Graph] workflow paused for clarification, sessionId={}, questions={}",
-                        sessionId,
-                        state.getPendingQuestions() == null ? 0 : state.getPendingQuestions().size());
-                return GraphResult.success(state.getFinalAnswer(), state.getValidationIssues());
+                return pauseForClarification(sessionId, state);
+            }
+
+            state = runRiskAndRevisionWorkflow(state);
+
+            if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
+                return pauseForClarification(sessionId, state);
             }
 
             state = finalizeAnswerNode.finish(state);
@@ -212,6 +265,18 @@ public class LangGraphPlannerFacade {
     }
 
     /**
+     * 进入澄清追问并保存 pending 状态。
+     */
+    private GraphResult pauseForClarification(String sessionId, TravelPlanState state) {
+        TravelPlanState clarifiedState = clarifyQuestionNode.ask(state);
+        conversationStateStore.savePendingState(sessionId, clarifiedState);
+        log.info("[Graph] workflow paused for clarification, sessionId={}, questions={}",
+                sessionId,
+                clarifiedState.getPendingQuestions() == null ? 0 : clarifiedState.getPendingQuestions().size());
+        return GraphResult.success(clarifiedState.getFinalAnswer(), clarifiedState.getValidationIssues());
+    }
+
+    /**
      * 执行第三阶段分支任务流。
      *
      * <p>生产环境由 Spring 注入真实 BranchDispatchNode / BranchExecuteNode；
@@ -223,6 +288,64 @@ public class LangGraphPlannerFacade {
         }
         TravelPlanState dispatchedState = branchDispatchNode.dispatch(state);
         return branchExecuteNode.execute(dispatchedState);
+    }
+
+    /**
+     * 执行第四阶段风险审查和自动修正闭环。
+     *
+     * <p>第一版最多自动修正 {@code maxRevisionCount} 次。风险节点或修正节点未注入时保持第三阶段旧行为。</p>
+     */
+    private TravelPlanState runRiskAndRevisionWorkflow(TravelPlanState state) {
+        if (tripRiskReasoningNode == null || planRevisionNode == null) {
+            return state;
+        }
+
+        TravelPlanState assessedState = tripRiskReasoningNode.assess(state);
+        assessedState = applyRiskClarificationIfNeeded(assessedState);
+        if (assessedState.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
+            return assessedState;
+        }
+        if (needsRevision(assessedState) && canRevise(assessedState)) {
+            assessedState = planRevisionNode.revise(assessedState);
+            assessedState = validateDraftNode.validate(assessedState);
+            if (assessedState.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
+                return assessedState;
+            }
+            assessedState = tripRiskReasoningNode.assess(assessedState);
+            assessedState = applyRiskClarificationIfNeeded(assessedState);
+        }
+        return assessedState;
+    }
+
+    /**
+     * 将风险审查中“必须追问用户”的问题转为 ClarifyQuestionNode 可读取的 ValidationIssue。
+     */
+    private static TravelPlanState applyRiskClarificationIfNeeded(TravelPlanState state) {
+        if (state == null || state.getRiskAssessment() == null || !state.getRiskAssessment().isNeedsClarification()) {
+            return state;
+        }
+
+        List<ValidationIssue> issues = new ArrayList<>(state.getValidationIssues() == null
+                ? List.of()
+                : state.getValidationIssues());
+        for (RiskIssue issue : state.getRiskAssessment().getIssues()) {
+            if (issue != null && issue.isRequiresClarification()) {
+                issues.add(ValidationIssue.high(issue.getCode(), issue.getMessage()));
+            }
+        }
+        state.setValidationIssues(issues);
+        state.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
+        return state;
+    }
+
+    private static boolean needsRevision(TravelPlanState state) {
+        return state != null
+                && state.getRiskAssessment() != null
+                && state.getRiskAssessment().isNeedsRevision();
+    }
+
+    private static boolean canRevise(TravelPlanState state) {
+        return state != null && state.getRevisionCount() < state.getMaxRevisionCount();
     }
 
     /**
