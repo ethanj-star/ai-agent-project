@@ -20,6 +20,9 @@ public class RequirementGenerateResponse {
     /** 当前需求表 ID。 */
     private String requirementId;
 
+    /** 第六阶段生成成功后保存的计划 ID；失败或未生成时为空。 */
+    private String planId;
+
     /** 生成后的需求表状态。 */
     private RequirementStatus status;
 
@@ -48,6 +51,14 @@ public class RequirementGenerateResponse {
 
     public void setRequirementId(String requirementId) {
         this.requirementId = requirementId;
+    }
+
+    public String getPlanId() {
+        return planId;
+    }
+
+    public void setPlanId(String planId) {
+        this.planId = planId;
     }
 
     public RequirementStatus getStatus() {

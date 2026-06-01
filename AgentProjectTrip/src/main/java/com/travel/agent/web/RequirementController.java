@@ -11,9 +11,12 @@ import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.GraphResult;
 import com.travel.agent.ai.graph.model.RequirementStatus;
 import com.travel.agent.ai.graph.model.RequirementValidation;
+import com.travel.agent.ai.graph.model.TravelPlanRecord;
+import com.travel.agent.ai.graph.model.TravelPlanVersion;
 import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import com.travel.agent.ai.graph.node.RequirementValidationNode;
 import com.travel.agent.ai.graph.store.RequirementStore;
+import com.travel.agent.ai.graph.store.TravelPlanStore;
 import com.travel.agent.core.service.CreditService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * 结构化旅行需求表 HTTP 入口（Web 层 - 第五阶段生成门控）。
@@ -51,6 +55,7 @@ public class RequirementController {
     private final RequirementExtractionAgent extractionAgent;
     private final RequirementValidationNode validationNode;
     private final RequirementStore requirementStore;
+    private final TravelPlanStore travelPlanStore;
     private final CreditService creditService;
     private final LangGraphPlannerFacade plannerFacade;
 
@@ -60,17 +65,20 @@ public class RequirementController {
      * @param extractionAgent 自然语言需求抽取 Agent
      * @param validationNode  需求表校验节点
      * @param requirementStore 需求表仓库
+     * @param travelPlanStore 第六阶段计划版本仓库
      * @param creditService   模拟生成额度服务
      * @param plannerFacade   前四阶段完整规划 Graph 门面
      */
     public RequirementController(RequirementExtractionAgent extractionAgent,
                                  RequirementValidationNode validationNode,
                                  RequirementStore requirementStore,
+                                 TravelPlanStore travelPlanStore,
                                  CreditService creditService,
                                  LangGraphPlannerFacade plannerFacade) {
         this.extractionAgent = extractionAgent;
         this.validationNode = validationNode;
         this.requirementStore = requirementStore;
+        this.travelPlanStore = travelPlanStore;
         this.creditService = creditService;
         this.plannerFacade = plannerFacade;
     }
@@ -241,19 +249,44 @@ public class RequirementController {
             graphResult = GraphResult.failure("完整规划生成失败，请稍后重试。", e.getMessage());
         }
 
+        String planId = null;
         if (graphResult.isSuccess()) {
             spec.setStatus(RequirementStatus.GENERATED);
+            TravelPlanRecord record = buildInitialPlanRecord(spec, graphResult);
+            travelPlanStore.save(record);
+            planId = record.getPlanId();
+            log.info("[Requirement] plan record saved, requirementId={}, planId={}",
+                    spec.getRequirementId(), planId);
         } else {
             creditService.refundGenerationCredit(spec.getSessionId());
             spec.setStatus(RequirementStatus.CONFIRMED);
         }
         requirementStore.save(spec);
 
-        return ResponseEntity.ok(new RequirementGenerateResponse(
+        RequirementGenerateResponse response = new RequirementGenerateResponse(
                 spec.getRequirementId(),
                 spec.getStatus(),
                 creditService.getRemainingCredits(spec.getSessionId()),
-                graphResult));
+                graphResult);
+        response.setPlanId(planId);
+        return ResponseEntity.ok(response);
+    }
+
+    private static TravelPlanRecord buildInitialPlanRecord(TravelRequirementSpec spec, GraphResult graphResult) {
+        TravelPlanRecord record = new TravelPlanRecord();
+        record.setPlanId("plan-" + UUID.randomUUID());
+        record.setRequirementId(spec.getRequirementId());
+        record.setSessionId(spec.getSessionId());
+        record.setRequirementSpec(spec);
+
+        TravelPlanVersion version = new TravelPlanVersion();
+        version.setVersion(1);
+        version.setFinalAnswer(graphResult.getAnswer());
+        version.setValidationIssues(graphResult.getValidationIssues());
+        version.setModificationSummary("初始完整规划");
+        version.setUserInstruction(spec.getOriginalMessage());
+        record.addVersion(version);
+        return record;
     }
 
     private static GraphInputRequest buildGraphRequest(TravelRequirementSpec spec) {
