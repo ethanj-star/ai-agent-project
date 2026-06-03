@@ -206,7 +206,9 @@ public class TripRiskReasoningNode {
                 3. 只标记会影响旅行质量或用户约束的问题。
                 4. 可自动修正的问题设置 autoRevisable=true。
                 5. 必须用户补充的问题设置 requiresClarification=true。
-                6. 当前系统日期：%s。
+                6. type 只能使用这些枚举：WEATHER_CONFLICT, CROWD_CONFLICT, BUDGET_CONFLICT, DURATION_MISMATCH, DESTINATION_MISMATCH, FLIGHT_BUDGET_CONFLICT, TRANSPORT_RISK, OVERLOADED_DAY, RAG_WARNING, TOOL_UNAVAILABLE, OPERATING_HOURS, BOOKING_REQUIRED, UNKNOWN。
+                7. 开放时间、闭馆日、营业时段与行程安排冲突时使用 OPERATING_HOURS；必须预约或固定入场时段风险使用 BOOKING_REQUIRED；类型不确定时使用 UNKNOWN。
+                8. 当前系统日期：%s。
 
                 用户需求：
                 %s

@@ -1,5 +1,8 @@
 package com.travel.agent.ai.graph.model;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
 /**
  * 风险审查问题类型。
  *
@@ -43,5 +46,47 @@ public enum RiskIssueType {
     RAG_WARNING,
 
     /** 分支工具不可用，草案不应伪造对应实时数据。 */
-    TOOL_UNAVAILABLE
+    TOOL_UNAVAILABLE,
+
+    /** 景点、餐厅、交通或服务开放时间与行程安排存在冲突。 */
+    OPERATING_HOURS,
+
+    /** 行程依赖预约、购票或固定入场时段，缺少预订会影响可执行性。 */
+    BOOKING_REQUIRED,
+
+    /** 模型返回了当前系统尚未显式建模的风险类型。 */
+    UNKNOWN;
+
+    /**
+     * 将模型返回的风险类型文本转换为系统枚举。
+     *
+     * <p>风险审查节点的输入来自大模型，模型偶尔会返回未登记的新类型。
+     * 这里统一做大小写兼容和 UNKNOWN 兜底，避免 Jackson 反序列化失败后丢弃整次模型审查结果。</p>
+     *
+     * @param value 模型返回的风险类型文本
+     * @return 匹配到的风险类型；未知时返回 UNKNOWN
+     */
+    @JsonCreator
+    public static RiskIssueType fromJson(String value) {
+        if (value == null || value.isBlank()) {
+            return UNKNOWN;
+        }
+        String normalized = value.trim();
+        for (RiskIssueType type : values()) {
+            if (type.name().equalsIgnoreCase(normalized)) {
+                return type;
+            }
+        }
+        return UNKNOWN;
+    }
+
+    /**
+     * 将枚举按稳定名称输出给 JSON。
+     *
+     * <p>前端、日志和后续节点都依赖枚举名作为机器可读类型，因此序列化时不做本地化翻译。</p>
+     */
+    @JsonValue
+    public String toJson() {
+        return name();
+    }
 }

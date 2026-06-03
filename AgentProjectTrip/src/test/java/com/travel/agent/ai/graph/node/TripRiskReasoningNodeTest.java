@@ -95,6 +95,54 @@ class TripRiskReasoningNodeTest {
     }
 
     /**
+     * 模型返回开放时间风险或未知风险类型时，不应导致整次模型审查解析失败。
+     */
+    @Test
+    void parseAssessmentAcceptsOperatingHoursAndUnknownTypes() throws Exception {
+        RiskAssessment operatingHours = node.parseAssessment("""
+                {
+                  "needsRevision": true,
+                  "needsClarification": false,
+                  "issues": [
+                    {
+                      "type": "OPERATING_HOURS",
+                      "severity": "MEDIUM",
+                      "code": "OPERATING_HOURS",
+                      "message": "周三闭馆，但草案安排了入内参观",
+                      "evidence": "草案第3天安排室内景点",
+                      "suggestedAction": "把该景点调整到开放日，或替换为户外街区",
+                      "autoRevisable": true,
+                      "requiresClarification": false
+                    }
+                  ],
+                  "revisionInstruction": "调整闭馆日冲突"
+                }
+                """);
+        RiskAssessment unknown = node.parseAssessment("""
+                {
+                  "needsRevision": true,
+                  "needsClarification": false,
+                  "issues": [
+                    {
+                      "type": "RANDOM_NEW_TYPE",
+                      "severity": "LOW",
+                      "code": "RANDOM_NEW_TYPE",
+                      "message": "模型返回了系统尚未登记的风险类型",
+                      "evidence": "risk type 未知",
+                      "suggestedAction": "保留问题文本，后续再扩展枚举",
+                      "autoRevisable": false,
+                      "requiresClarification": false
+                    }
+                  ],
+                  "revisionInstruction": null
+                }
+                """);
+
+        assertThat(operatingHours.getIssues().get(0).getType()).isEqualTo(RiskIssueType.OPERATING_HOURS);
+        assertThat(unknown.getIssues().get(0).getType()).isEqualTo(RiskIssueType.UNKNOWN);
+    }
+
+    /**
      * 模型不应把可自动修正的避峰冲突升级成用户澄清问题。
      */
     @Test

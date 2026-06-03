@@ -1,0 +1,1016 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Lab · Travel Planner</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d9dee7;
+      --text: #1f2937;
+      --muted: #667085;
+      --soft: #eef2f7;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --ok: #14804a;
+      --warn: #9a5b00;
+      --danger: #b42318;
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 12px 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    h3 {
+      margin: 14px 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(360px, 500px) minmax(480px, 1fr);
+      gap: 16px;
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 16px 20px 24px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      min-width: min(760px, 100%);
+    }
+
+    .status-item {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: var(--soft);
+      min-width: 0;
+    }
+
+    .status-item span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .status-item strong {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #344054;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid #cfd6e3;
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: var(--primary);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--primary-dark);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    button.secondary {
+      border-color: var(--line);
+      background: #fff;
+      color: var(--text);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: var(--soft);
+    }
+
+    button.warn {
+      background: #b7791f;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: var(--soft);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge.ok {
+      background: #e7f8ef;
+      color: var(--ok);
+    }
+
+    .badge.warn {
+      background: #fff5db;
+      color: var(--warn);
+    }
+
+    .badge.error {
+      background: #ffebe9;
+      color: var(--danger);
+    }
+
+    .message {
+      margin: 10px 0 0;
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: var(--soft);
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+
+    .message.error {
+      background: #ffebe9;
+      color: var(--danger);
+    }
+
+    .message.ok {
+      background: #e7f8ef;
+      color: var(--ok);
+    }
+
+    .message.warn {
+      background: #fff5db;
+      color: var(--warn);
+    }
+
+    .missing-list,
+    .warning-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .warning-list {
+      color: var(--warn);
+    }
+
+    .answer-box {
+      min-height: 380px;
+      max-height: 70vh;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 14px;
+      background: #fff;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .json-box {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px;
+      background: #101828;
+      color: #d0d5dd;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+    }
+
+    .loading-bar {
+      display: none;
+      height: 3px;
+      overflow: hidden;
+      background: #dbeafe;
+    }
+
+    .loading-bar.active {
+      display: block;
+    }
+
+    .loading-bar::before {
+      content: "";
+      display: block;
+      width: 35%;
+      height: 100%;
+      background: var(--primary);
+      animation: loading 1.2s ease-in-out infinite;
+    }
+
+    @keyframes loading {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(320%); }
+    }
+
+    @media (max-width: 980px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .status-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .grid-2,
+      .grid-3 {
+        grid-template-columns: 1fr;
+      }
+
+      .layout {
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div>
+      <h1>Agent Lab</h1>
+      <div class="subtle">开发调试模式：后端重启后 requirementId、planId 和版本记录会丢失。</div>
+    </div>
+    <div class="status-grid">
+      <div class="status-item">
+        <span>Session</span>
+        <strong id="sessionLabel">test-006</strong>
+      </div>
+      <div class="status-item">
+        <span>Requirement</span>
+        <strong id="requirementLabel">-</strong>
+      </div>
+      <div class="status-item">
+        <span>Plan</span>
+        <strong id="planLabel">-</strong>
+      </div>
+      <div class="status-item">
+        <span>Version</span>
+        <strong id="versionLabel">-</strong>
+      </div>
+      <div class="status-item">
+        <span>Credits</span>
+        <strong id="creditsLabel">-</strong>
+      </div>
+    </div>
+  </div>
+  <div id="loadingBar" class="loading-bar"></div>
+</header>
+
+<main class="layout">
+  <section class="stack">
+    <div class="panel">
+      <h2>1. 自然语言需求</h2>
+      <label for="sessionInput">Session ID</label>
+      <input id="sessionInput" value="test-006">
+      <label for="naturalInput" style="margin-top:10px;">旅行需求</label>
+      <textarea id="naturalInput">国庆去法国和意大利玩10天，预算1200欧，不含国际机票，2个人，从上海出发，想避开人多的地方</textarea>
+      <div class="actions">
+        <button id="draftBtn">整理需求表</button>
+        <button class="secondary" id="exampleCompleteBtn">完整示例</button>
+        <button class="secondary" id="exampleVagueBtn">模糊示例</button>
+        <button class="secondary" id="resetBtn">清空状态</button>
+      </div>
+      <div id="draftMessage" class="message">先把自然语言整理成结构化需求表，再确认生成。</div>
+    </div>
+
+    <div class="panel">
+      <h2>2. 需求表编辑</h2>
+      <div class="grid-2">
+        <div>
+          <label for="destinationsInput">目的地，逗号分隔</label>
+          <input id="destinationsInput" placeholder="法国,意大利">
+        </div>
+        <div>
+          <label for="departureCityInput">出发城市</label>
+          <input id="departureCityInput" placeholder="上海">
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:10px;">
+        <div>
+          <label for="startDateTextInput">出行时间</label>
+          <input id="startDateTextInput" placeholder="国庆">
+        </div>
+        <div>
+          <label for="durationDaysInput">天数</label>
+          <input id="durationDaysInput" type="number" min="1" placeholder="10">
+        </div>
+        <div>
+          <label for="travelerCountInput">人数</label>
+          <input id="travelerCountInput" type="number" min="1" placeholder="2">
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:10px;">
+        <div>
+          <label for="budgetAmountInput">预算金额</label>
+          <input id="budgetAmountInput" type="number" min="0" step="1" placeholder="1200">
+        </div>
+        <div>
+          <label for="budgetCurrencyInput">币种</label>
+          <select id="budgetCurrencyInput">
+            <option value="">未指定</option>
+            <option value="EUR">EUR</option>
+            <option value="CNY">CNY</option>
+            <option value="USD">USD</option>
+            <option value="GBP">GBP</option>
+          </select>
+        </div>
+        <div>
+          <label for="flightBudgetInput">是否包含国际机票</label>
+          <select id="flightBudgetInput">
+            <option value="">未确认</option>
+            <option value="true">包含</option>
+            <option value="false">不包含</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:10px;">
+        <div>
+          <label for="preferencesInput">偏好，逗号分隔</label>
+          <input id="preferencesInput" placeholder="小众,美食">
+        </div>
+        <div>
+          <label for="avoidancesInput">避开内容，逗号分隔</label>
+          <input id="avoidancesInput" placeholder="避开人多">
+        </div>
+      </div>
+      <div class="grid-3" style="margin-top:10px;">
+        <div>
+          <label for="travelStyleInput">旅行风格</label>
+          <input id="travelStyleInput" placeholder="慢游">
+        </div>
+        <div>
+          <label for="accommodationInput">住宿偏好</label>
+          <input id="accommodationInput" placeholder="经济型酒店">
+        </div>
+        <div>
+          <label for="transportInput">交通偏好</label>
+          <input id="transportInput" placeholder="火车">
+        </div>
+      </div>
+      <div class="actions">
+        <button id="saveBtn" class="secondary">保存需求表</button>
+        <button id="confirmBtn">确认需求表</button>
+        <button id="generateBtn" class="warn">生成完整规划</button>
+      </div>
+      <div id="validationBox"></div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="panel">
+      <h2>3. 规划结果</h2>
+      <div class="actions" style="margin-top:0;margin-bottom:10px;">
+        <button class="secondary" id="loadPlanBtn">刷新当前计划</button>
+        <button class="secondary" id="loadV1Btn">查看 v1</button>
+        <button class="secondary" id="copyAnswerBtn">复制结果</button>
+      </div>
+      <div id="resultMeta" class="subtle">生成后会显示 planId、版本和完整答案。</div>
+      <div id="answerBox" class="answer-box" style="margin-top:10px;">暂无规划结果。</div>
+    </div>
+
+    <div class="panel">
+      <h2>4. 自然语言修改</h2>
+      <label for="modifyInput">修改指令</label>
+      <textarea id="modifyInput">第三天太赶了，少安排一个城市，多留一点自由时间</textarea>
+      <div class="actions">
+        <button id="modifyBtn">修改计划</button>
+        <button class="secondary" id="exampleLocalBtn">局部修改示例</button>
+        <button class="secondary" id="exampleRequirementBtn">核心需求变更示例</button>
+        <button class="secondary" id="exampleCommentBtn">普通评论示例</button>
+      </div>
+      <div id="modifyMessage" class="message">生成 planId 后，可以在这里测试计划版本化修改。</div>
+    </div>
+
+    <div class="panel">
+      <h2>5. 原始 JSON</h2>
+      <pre id="jsonBox" class="json-box">暂无响应。</pre>
+    </div>
+  </section>
+</main>
+
+<script>
+  const state = {
+    sessionId: "test-006",
+    requirementId: null,
+    planId: null,
+    currentVersion: null,
+    remainingCredits: null,
+    spec: null,
+    validation: null,
+    graphResult: null,
+    currentAnswer: null,
+    lastRawResponse: null,
+    loading: false
+  };
+
+  const el = (id) => document.getElementById(id);
+
+  const fields = {
+    sessionInput: el("sessionInput"),
+    naturalInput: el("naturalInput"),
+    destinations: el("destinationsInput"),
+    departureCity: el("departureCityInput"),
+    startDateText: el("startDateTextInput"),
+    durationDays: el("durationDaysInput"),
+    travelerCount: el("travelerCountInput"),
+    budgetAmount: el("budgetAmountInput"),
+    budgetCurrency: el("budgetCurrencyInput"),
+    flightBudget: el("flightBudgetInput"),
+    preferences: el("preferencesInput"),
+    avoidances: el("avoidancesInput"),
+    travelStyle: el("travelStyleInput"),
+    accommodation: el("accommodationInput"),
+    transport: el("transportInput"),
+    modifyInput: el("modifyInput")
+  };
+
+  function setLoading(value, label) {
+    state.loading = value;
+    el("loadingBar").classList.toggle("active", value);
+    const buttons = document.querySelectorAll("button");
+    buttons.forEach((button) => button.disabled = value);
+    if (label) {
+      showMessage("draftMessage", label, "ok");
+    }
+    renderStatus();
+  }
+
+  async function api(path, options = {}) {
+    const response = await fetch(path, {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        ...(options.headers || {})
+      },
+      ...options
+    });
+
+    const text = await response.text();
+    let body = text;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch (ignored) {
+      body = text;
+    }
+
+    state.lastRawResponse = body;
+    renderJson(body);
+
+    if (!response.ok) {
+      const message = extractErrorMessage(body) || `HTTP ${response.status}`;
+      const error = new Error(message);
+      error.body = body;
+      error.status = response.status;
+      throw error;
+    }
+    return body;
+  }
+
+  function extractErrorMessage(body) {
+    if (!body) return "";
+    if (typeof body === "string") return body;
+    return body.assistantMessage
+      || body.question
+      || body.graphResult?.answer
+      || body.graphResult?.errorMessage
+      || body.message
+      || "";
+  }
+
+  function parseCsv(value) {
+    if (!value || !value.trim()) return [];
+    return value.split(/[,，]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function csv(values) {
+    return Array.isArray(values) ? values.join(",") : "";
+  }
+
+  function numberOrNull(value) {
+    if (value === null || value === undefined || String(value).trim() === "") {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function intOrNull(value) {
+    const parsed = numberOrNull(value);
+    return parsed === null ? null : Math.trunc(parsed);
+  }
+
+  function boolOrNull(value) {
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return null;
+  }
+
+  function fillForm(spec) {
+    const safe = spec || {};
+    fields.destinations.value = csv(safe.destinations);
+    fields.departureCity.value = safe.departureCity || "";
+    fields.startDateText.value = safe.startDateText || "";
+    fields.durationDays.value = safe.durationDays ?? "";
+    fields.travelerCount.value = safe.travelerCount ?? "";
+    fields.budgetAmount.value = safe.budgetAmount ?? "";
+    fields.budgetCurrency.value = safe.budgetCurrency || "";
+    fields.flightBudget.value = safe.budgetIncludesInternationalFlight === true
+      ? "true"
+      : safe.budgetIncludesInternationalFlight === false
+        ? "false"
+        : "";
+    fields.preferences.value = csv(safe.preferences);
+    fields.avoidances.value = csv(safe.avoidances);
+    fields.travelStyle.value = safe.travelStyle || "";
+    fields.accommodation.value = safe.accommodationPreference || "";
+    fields.transport.value = safe.transportPreference || "";
+  }
+
+  function readSpecFromForm() {
+    const current = state.spec || {};
+    return {
+      ...current,
+      requirementId: state.requirementId || current.requirementId || null,
+      sessionId: fields.sessionInput.value.trim() || state.sessionId,
+      destinations: parseCsv(fields.destinations.value),
+      departureCity: fields.departureCity.value.trim() || null,
+      startDateText: fields.startDateText.value.trim() || null,
+      durationDays: intOrNull(fields.durationDays.value),
+      travelerCount: intOrNull(fields.travelerCount.value),
+      budgetAmount: numberOrNull(fields.budgetAmount.value),
+      budgetCurrency: fields.budgetCurrency.value || null,
+      budgetIncludesInternationalFlight: boolOrNull(fields.flightBudget.value),
+      preferences: parseCsv(fields.preferences.value),
+      avoidances: parseCsv(fields.avoidances.value),
+      travelStyle: fields.travelStyle.value.trim() || null,
+      accommodationPreference: fields.accommodation.value.trim() || null,
+      transportPreference: fields.transport.value.trim() || null
+    };
+  }
+
+  function applyDraftResponse(data) {
+    state.requirementId = data.requirementId || data.spec?.requirementId || state.requirementId;
+    state.spec = data.spec || state.spec;
+    state.validation = data.validation || null;
+    fillForm(state.spec);
+    showMessage("draftMessage", data.assistantMessage || "需求表已更新。", state.validation?.readyToConfirm ? "ok" : "");
+    renderValidation();
+    renderStatus();
+  }
+
+  async function draftRequirement() {
+    state.sessionId = fields.sessionInput.value.trim() || "test-006";
+    setLoading(true, "整理需求表中...");
+    try {
+      const data = await api("/api/v1/requirements/draft", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          message: fields.naturalInput.value.trim()
+        })
+      });
+      applyDraftResponse(data);
+    } catch (error) {
+      showMessage("draftMessage", error.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveRequirement() {
+    if (!state.requirementId) {
+      showMessage("draftMessage", "请先整理需求表。", "error");
+      return;
+    }
+    setLoading(true, "保存需求表中...");
+    try {
+      const data = await api(`/api/v1/requirements/${encodeURIComponent(state.requirementId)}`, {
+        method: "PUT",
+        body: JSON.stringify(readSpecFromForm())
+      });
+      applyDraftResponse(data);
+    } catch (error) {
+      showMessage("draftMessage", error.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirmRequirement() {
+    if (!state.requirementId) {
+      showMessage("draftMessage", "请先整理需求表。", "error");
+      return;
+    }
+    setLoading(true, "确认需求表中...");
+    try {
+      const data = await api(`/api/v1/requirements/${encodeURIComponent(state.requirementId)}/confirm`, {
+        method: "POST",
+        body: JSON.stringify({ spec: readSpecFromForm() })
+      });
+      applyDraftResponse(data);
+      showMessage("draftMessage", "需求表已确认，可以生成完整规划。", "ok");
+    } catch (error) {
+      if (error.body?.spec || error.body?.validation) {
+        applyDraftResponse(error.body);
+      }
+      showMessage("draftMessage", error.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function generatePlan() {
+    if (!state.requirementId) {
+      showMessage("draftMessage", "请先整理并确认需求表。", "error");
+      return;
+    }
+    setLoading(true, "生成完整规划中，这一步可能需要 1-2 分钟...");
+    try {
+      const data = await api(`/api/v1/requirements/${encodeURIComponent(state.requirementId)}/generate`, {
+        method: "POST",
+        body: "{}"
+      });
+      state.planId = data.planId || state.planId;
+      state.remainingCredits = data.remainingCredits;
+      state.graphResult = data.graphResult || null;
+      state.currentAnswer = data.graphResult?.answer || state.currentAnswer;
+      renderAnswer(state.currentAnswer || "生成完成，但响应中没有 answer。");
+      showMessage("draftMessage", data.planId ? `生成成功，planId=${data.planId}` : "生成完成。", "ok");
+      if (state.planId) {
+        await loadPlan(false);
+      }
+    } catch (error) {
+      showMessage("draftMessage", error.message, "error");
+      if (error.body?.graphResult?.answer) {
+        renderAnswer(error.body.graphResult.answer);
+      }
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function loadPlan(showErrors = true) {
+    if (!state.planId) {
+      if (showErrors) showMessage("modifyMessage", "还没有 planId，请先生成完整规划。", "error");
+      return;
+    }
+    setLoading(true, "读取计划中...");
+    try {
+      const data = await api(`/api/v1/plans/${encodeURIComponent(state.planId)}`);
+      state.currentVersion = data.currentVersion || state.currentVersion;
+      state.currentAnswer = data.currentAnswer || state.currentAnswer;
+      state.spec = data.requirementSpec || state.spec;
+      fillForm(state.spec);
+      renderAnswer(state.currentAnswer || "计划存在，但当前答案为空。");
+      showMessage("modifyMessage", "当前计划已刷新。", "ok");
+    } catch (error) {
+      if (showErrors) {
+        showMessage("modifyMessage", error.message, "error");
+      }
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function loadVersion(version) {
+    if (!state.planId) {
+      showMessage("modifyMessage", "还没有 planId，请先生成完整规划。", "error");
+      return;
+    }
+    setLoading(true, `读取 v${version} 中...`);
+    try {
+      const data = await api(`/api/v1/plans/${encodeURIComponent(state.planId)}/versions/${version}`);
+      state.currentVersion = data.version || state.currentVersion;
+      state.currentAnswer = data.finalAnswer || state.currentAnswer;
+      renderAnswer(state.currentAnswer || `v${version} 没有答案。`);
+      showMessage("modifyMessage", `已读取 v${version}。`, "ok");
+    } catch (error) {
+      showMessage("modifyMessage", error.message, "error");
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function modifyPlan() {
+    if (!state.planId) {
+      showMessage("modifyMessage", "还没有 planId，请先生成完整规划。", "error");
+      return;
+    }
+    setLoading(true, "修改计划中...");
+    try {
+      const data = await api(`/api/v1/plans/${encodeURIComponent(state.planId)}/modify`, {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          message: fields.modifyInput.value.trim()
+        })
+      });
+      handleModifyResponse(data);
+    } catch (error) {
+      showMessage("modifyMessage", error.message, "error");
+      if (error.body) handleModifyResponse(error.body);
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  function handleModifyResponse(data) {
+    if (!data) return;
+    if (data.status === "UPDATED") {
+      state.currentVersion = data.version || state.currentVersion;
+      state.currentAnswer = data.answer || state.currentAnswer;
+      renderAnswer(state.currentAnswer);
+      showMessage("modifyMessage", data.assistantMessage || `已生成 v${state.currentVersion}。`, "ok");
+      return;
+    }
+
+    if (data.status === "REQUIREMENT_NEEDS_CONFIRMATION" || data.status === "REQUIREMENT_NEEDS_USER_INPUT") {
+      state.spec = data.requirementSpec || state.spec;
+      state.validation = data.validation || null;
+      fillForm(state.spec);
+      renderValidation();
+      showMessage("modifyMessage", data.assistantMessage || "核心需求已变化，请确认需求表。", "warn");
+      return;
+    }
+
+    if (data.status === "NEEDS_CLARIFICATION") {
+      showMessage("modifyMessage", data.question || data.assistantMessage || "需要进一步确认修改范围。", "warn");
+      return;
+    }
+
+    if (data.status === "DIRECT_COMMENT") {
+      showMessage("modifyMessage", data.assistantMessage || "计划保持不变。", "ok");
+      return;
+    }
+
+    showMessage("modifyMessage", data.assistantMessage || data.status || "修改请求已返回。", data.status === "ERROR" ? "error" : "");
+  }
+
+  function renderValidation() {
+    const validation = state.validation;
+    if (!validation) {
+      el("validationBox").innerHTML = "";
+      return;
+    }
+
+    const statusBadge = validation.readyToConfirm
+      ? '<span class="badge ok">READY_TO_CONFIRM</span>'
+      : '<span class="badge warn">NEEDS_USER_INPUT</span>';
+
+    const missing = Array.isArray(validation.missingFields) && validation.missingFields.length
+      ? `<h3>缺失字段</h3><ul class="missing-list">${validation.missingFields.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+      : "";
+
+    const warnings = Array.isArray(validation.warnings) && validation.warnings.length
+      ? `<h3>提醒</h3><ul class="warning-list">${validation.warnings.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+      : "";
+
+    const blockers = Array.isArray(validation.blockingReasons) && validation.blockingReasons.length
+      ? `<h3>阻塞原因</h3><ul class="missing-list">${validation.blockingReasons.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+      : "";
+
+    el("validationBox").innerHTML = `
+      <div style="margin-top:12px;">${statusBadge}</div>
+      ${missing}
+      ${blockers}
+      ${warnings}
+    `;
+  }
+
+  function renderAnswer(answer) {
+    el("answerBox").textContent = answer || "暂无规划结果。";
+    el("resultMeta").textContent = `planId=${state.planId || "-"} · version=${state.currentVersion || "-"} · requirementId=${state.requirementId || "-"}`;
+  }
+
+  function renderJson(data) {
+    el("jsonBox").textContent = data === undefined
+      ? "暂无响应。"
+      : JSON.stringify(data, null, 2);
+  }
+
+  function renderStatus() {
+    state.sessionId = fields.sessionInput.value.trim() || state.sessionId || "test-006";
+    el("sessionLabel").textContent = state.sessionId || "-";
+    el("requirementLabel").textContent = state.requirementId || "-";
+    el("planLabel").textContent = state.planId || "-";
+    el("versionLabel").textContent = state.currentVersion ? `v${state.currentVersion}` : "-";
+    el("creditsLabel").textContent = state.remainingCredits ?? "-";
+
+    el("saveBtn").disabled = state.loading || !state.requirementId;
+    el("confirmBtn").disabled = state.loading || !state.requirementId;
+    el("generateBtn").disabled = state.loading || !state.requirementId;
+    el("loadPlanBtn").disabled = state.loading || !state.planId;
+    el("loadV1Btn").disabled = state.loading || !state.planId;
+    el("copyAnswerBtn").disabled = state.loading || !state.currentAnswer;
+    el("modifyBtn").disabled = state.loading || !state.planId;
+  }
+
+  function showMessage(id, text, type = "") {
+    const box = el(id);
+    box.textContent = text || "";
+    box.className = `message ${type || ""}`.trim();
+  }
+
+  function resetState() {
+    state.requirementId = null;
+    state.planId = null;
+    state.currentVersion = null;
+    state.remainingCredits = null;
+    state.spec = null;
+    state.validation = null;
+    state.graphResult = null;
+    state.currentAnswer = null;
+    state.lastRawResponse = null;
+    fillForm(null);
+    renderValidation();
+    renderAnswer(null);
+    renderJson(undefined);
+    showMessage("draftMessage", "状态已清空，可以重新整理需求表。");
+    showMessage("modifyMessage", "生成 planId 后，可以在这里测试计划版本化修改。");
+    renderStatus();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  async function copyAnswer() {
+    if (!state.currentAnswer) return;
+    try {
+      await navigator.clipboard.writeText(state.currentAnswer);
+      showMessage("modifyMessage", "已复制当前规划结果。", "ok");
+    } catch (ignored) {
+      showMessage("modifyMessage", "浏览器不允许自动复制，可以手动选择结果文本。", "warn");
+    }
+  }
+
+  el("draftBtn").addEventListener("click", draftRequirement);
+  el("saveBtn").addEventListener("click", saveRequirement);
+  el("confirmBtn").addEventListener("click", confirmRequirement);
+  el("generateBtn").addEventListener("click", generatePlan);
+  el("loadPlanBtn").addEventListener("click", () => loadPlan(true));
+  el("loadV1Btn").addEventListener("click", () => loadVersion(1));
+  el("modifyBtn").addEventListener("click", modifyPlan);
+  el("copyAnswerBtn").addEventListener("click", copyAnswer);
+  el("resetBtn").addEventListener("click", resetState);
+
+  el("exampleCompleteBtn").addEventListener("click", () => {
+    fields.naturalInput.value = "国庆去法国和意大利玩10天，预算1200欧，不含国际机票，2个人，从上海出发，想避开人多的地方";
+  });
+  el("exampleVagueBtn").addEventListener("click", () => {
+    fields.naturalInput.value = "我想下个月去欧洲玩，帮我安排";
+  });
+  el("exampleLocalBtn").addEventListener("click", () => {
+    fields.modifyInput.value = "第三天太赶了，少安排一个城市，多留一点自由时间";
+  });
+  el("exampleRequirementBtn").addEventListener("click", () => {
+    fields.modifyInput.value = "预算改成900欧，不想住青旅，改成经济型酒店";
+  });
+  el("exampleCommentBtn").addEventListener("click", () => {
+    fields.modifyInput.value = "这个方案不错，我先看看";
+  });
+
+  fields.sessionInput.addEventListener("input", renderStatus);
+  renderStatus();
+</script>
+</body>
+</html>
