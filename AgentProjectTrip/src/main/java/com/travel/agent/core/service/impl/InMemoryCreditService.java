@@ -1,6 +1,7 @@
 package com.travel.agent.core.service.impl;
 
 import com.travel.agent.core.service.CreditService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.util.Map;
@@ -21,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </p>
  */
 @Service
+@ConditionalOnProperty(name = "travel.persistence.type", havingValue = "memory", matchIfMissing = true)
 public class InMemoryCreditService implements CreditService {
 
     /** 开发阶段每个 session 默认赠送的完整生成次数。 */

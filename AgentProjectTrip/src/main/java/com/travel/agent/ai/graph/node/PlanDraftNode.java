@@ -133,7 +133,8 @@ public class PlanDraftNode {
      * <p>提示词中同时放入用户原文、Gatekeeper 结构化实体、RAG 上下文和当前日期。
      * 这样核心模型既能看到自然语言细节，也能利用上游节点提取出的稳定字段。
      * 第三阶段开始额外注入分支 Agent 结果，让 Planner 可以区分工具确认信息和工具失败降级信息。
-     * 第五阶段开始额外注入已确认 TravelRequirementSpec，要求 Planner 优先服从表单字段。</p>
+     * 第五阶段开始额外注入已确认 TravelRequirementSpec，要求 Planner 优先服从表单字段。
+     * 第七阶段开始注入用户记忆摘要，但只作为参考偏好，不允许覆盖本次需求表。</p>
      *
      * @param state 当前旅行规划状态
      * @return 完整系统提示词
@@ -153,6 +154,9 @@ public class PlanDraftNode {
                 : "私有知识库暂无可用上下文。";
         String branchContext = formatBranchResults(state.getBranchResults());
         String requirementContext = formatRequirementSpec(state.getRequirementSpec());
+        String memoryContext = hasText(state.getUserMemoryContext())
+                ? state.getUserMemoryContext()
+                : "无。";
 
         return """
                 你是一个欧洲旅行规划系统中的 Planner 节点。你的任务是基于用户输入、结构化意图和 RAG 上下文，生成第一版旅行规划草案。
@@ -165,12 +169,16 @@ public class PlanDraftNode {
                 5. 分支 Agent 成功返回的数据可以作为已确认参考；分支失败或未启用时，只能写风险提醒，不能伪造实时结果。
                 6. 行程建议要具体，优先使用 RAG 上下文中的防坑、POI、交通经验。
                 7. 如果“已确认结构化需求表”不为空，它是优先级最高的用户事实来源，不得被原始自然语言或模型假设覆盖。
-                8. 当前系统日期是：%s。
+                8. 用户记忆只能作为参考偏好，不得覆盖本次明确输入和已确认结构化需求表。
+                9. 当前系统日期是：%s。
 
                 用户原始输入：
                 %s
 
                 已确认结构化需求表：
+                %s
+
+                用户记忆摘要：
                 %s
 
                 Gatekeeper 提取信息：
@@ -198,6 +206,7 @@ public class PlanDraftNode {
                 LocalDate.now(),
                 defaultText(state.getUserQuery(), "未提供"),
                 requirementContext,
+                memoryContext,
                 destinations,
                 defaultText(state.getTravelTime(), "未指定"),
                 duration,

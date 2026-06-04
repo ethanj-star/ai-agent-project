@@ -20,6 +20,7 @@ import com.travel.agent.ai.graph.node.TripRiskReasoningNode;
 import com.travel.agent.ai.graph.node.ValidateDraftNode;
 import com.travel.agent.ai.graph.store.ConversationStateStore;
 import com.travel.agent.ai.graph.store.InMemoryConversationStateStore;
+import com.travel.agent.ai.memory.UserMemoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -95,6 +96,9 @@ public class LangGraphPlannerFacade {
     /** 第二阶段保存 pending 状态的会话仓库。 */
     private final ConversationStateStore conversationStateStore;
 
+    /** 第七阶段用户记忆服务；测试构造器可为空，生产环境由 Spring setter 注入。 */
+    private UserMemoryService userMemoryService;
+
     /**
      * 构造器注入当前规划工作流需要的全部节点。
      *
@@ -127,6 +131,19 @@ public class LangGraphPlannerFacade {
         this.preClarifyCheckNode = preClarifyCheckNode;
         this.finalizeAnswerNode = finalizeAnswerNode;
         this.conversationStateStore = conversationStateStore;
+    }
+
+    /**
+     * 注入用户记忆服务。
+     *
+     * <p>使用 setter 而不是主构造器，是为了保持旧单元测试构造器稳定。
+     * 没有记忆服务时 Graph 仍按前六阶段流程运行。</p>
+     *
+     * @param userMemoryService 用户记忆服务
+     */
+    @Autowired(required = false)
+    public void setUserMemoryService(UserMemoryService userMemoryService) {
+        this.userMemoryService = userMemoryService;
     }
 
     /**
@@ -216,6 +233,7 @@ public class LangGraphPlannerFacade {
                         return mergeClarificationNode.merge(pendingState, safeRequest);
                     })
                     .orElseGet(() -> initStateNode.init(safeRequest));
+            state = attachUserMemoryContext(state, sessionId);
 
             state = preClarifyCheckNode.check(state);
             if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
@@ -262,6 +280,20 @@ public class LangGraphPlannerFacade {
             log.debug("[Graph] workflow failure detail", e);
             return GraphResult.failure(FAILURE_ANSWER, e.getMessage());
         }
+    }
+
+    /**
+     * 将用户记忆摘要写入 Graph 状态。
+     *
+     * <p>记忆只在 Planner prompt 中作为参考偏好出现，不改变 TravelRequirementSpec 和 Gatekeeper 实体，
+     * 因此不会覆盖用户本次明确输入。</p>
+     */
+    private TravelPlanState attachUserMemoryContext(TravelPlanState state, String sessionId) {
+        if (state == null || userMemoryService == null) {
+            return state;
+        }
+        state.setUserMemoryContext(userMemoryService.buildPromptContext(null, sessionId));
+        return state;
     }
 
     /**

@@ -86,6 +86,22 @@ class PlanDraftNodeTest {
     }
 
     /**
+     * 第七阶段用户记忆应进入 Planner Prompt，但只能作为参考偏好。
+     */
+    @Test
+    void buildSystemPromptContainsUserMemoryContext() {
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("结构化需求生成");
+        state.setUserMemoryContext("- [LONG_TERM/PREFERENCE] accommodationPreference = 不住青旅");
+
+        String prompt = node.buildSystemPrompt(state);
+
+        assertThat(prompt).contains("用户记忆摘要");
+        assertThat(prompt).contains("accommodationPreference = 不住青旅");
+        assertThat(prompt).contains("用户记忆只能作为参考偏好");
+    }
+
+    /**
      * 模型返回合法 JSON Object 时，应解析为 PlannerDraft。
      */
     @Test

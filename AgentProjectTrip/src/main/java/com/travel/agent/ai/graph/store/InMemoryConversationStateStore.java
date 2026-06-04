@@ -2,6 +2,7 @@ package com.travel.agent.ai.graph.store;
 
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -24,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>注意：本实现重启后状态会丢失。后续阶段可以在不改变接口的前提下替换为 Redis 或数据库实现。</p>
  */
 @Component
+@ConditionalOnProperty(name = "travel.persistence.type", havingValue = "memory", matchIfMissing = true)
 public class InMemoryConversationStateStore implements ConversationStateStore {
 
     /** sessionId -> pending TravelPlanState。 */

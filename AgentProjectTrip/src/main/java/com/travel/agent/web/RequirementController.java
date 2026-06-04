@@ -17,6 +17,7 @@ import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import com.travel.agent.ai.graph.node.RequirementValidationNode;
 import com.travel.agent.ai.graph.store.RequirementStore;
 import com.travel.agent.ai.graph.store.TravelPlanStore;
+import com.travel.agent.ai.memory.UserMemoryService;
 import com.travel.agent.core.service.CreditService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +59,7 @@ public class RequirementController {
     private final TravelPlanStore travelPlanStore;
     private final CreditService creditService;
     private final LangGraphPlannerFacade plannerFacade;
+    private final UserMemoryService userMemoryService;
 
     /**
      * 构造器注入第五阶段入口需要的服务。
@@ -68,19 +70,22 @@ public class RequirementController {
      * @param travelPlanStore 第六阶段计划版本仓库
      * @param creditService   模拟生成额度服务
      * @param plannerFacade   前四阶段完整规划 Graph 门面
+     * @param userMemoryService 第七阶段用户记忆服务
      */
     public RequirementController(RequirementExtractionAgent extractionAgent,
                                  RequirementValidationNode validationNode,
                                  RequirementStore requirementStore,
                                  TravelPlanStore travelPlanStore,
                                  CreditService creditService,
-                                 LangGraphPlannerFacade plannerFacade) {
+                                 LangGraphPlannerFacade plannerFacade,
+                                 UserMemoryService userMemoryService) {
         this.extractionAgent = extractionAgent;
         this.validationNode = validationNode;
         this.requirementStore = requirementStore;
         this.travelPlanStore = travelPlanStore;
         this.creditService = creditService;
         this.plannerFacade = plannerFacade;
+        this.userMemoryService = userMemoryService;
     }
 
     /**
@@ -176,6 +181,7 @@ public class RequirementController {
                     }
                     spec.setStatus(RequirementStatus.CONFIRMED);
                     requirementStore.save(spec);
+                    userMemoryService.syncFromConfirmedRequirement(spec);
                     return ResponseEntity.ok(buildResponse(spec, validation));
                 })
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body(new RequirementDraftResponse(

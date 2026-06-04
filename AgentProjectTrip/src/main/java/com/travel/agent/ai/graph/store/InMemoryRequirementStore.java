@@ -1,6 +1,7 @@
 package com.travel.agent.ai.graph.store;
 
 import com.travel.agent.ai.graph.model.TravelRequirementSpec;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -23,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>注意：内存实现会在应用重启后丢失数据，仅适合开发和单机验证。</p>
  */
 @Component
+@ConditionalOnProperty(name = "travel.persistence.type", havingValue = "memory", matchIfMissing = true)
 public class InMemoryRequirementStore implements RequirementStore {
 
     /** requirementId -> TravelRequirementSpec 的单机内存表。 */

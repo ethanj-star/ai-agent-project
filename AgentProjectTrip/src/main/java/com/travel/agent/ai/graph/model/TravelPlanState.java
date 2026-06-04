@@ -91,6 +91,9 @@ public class TravelPlanState {
     /** 第四阶段风险推理节点输出的结构化审查结果。 */
     private RiskAssessment riskAssessment;
 
+    /** 第七阶段注入的用户记忆摘要；只作为 Planner 参考，不覆盖本次明确需求。 */
+    private String userMemoryContext;
+
     /** 当前已经执行过的自动修正次数。 */
     private int revisionCount;
 
@@ -279,6 +282,14 @@ public class TravelPlanState {
 
     public void setRiskAssessment(RiskAssessment riskAssessment) {
         this.riskAssessment = riskAssessment;
+    }
+
+    public String getUserMemoryContext() {
+        return userMemoryContext;
+    }
+
+    public void setUserMemoryContext(String userMemoryContext) {
+        this.userMemoryContext = userMemoryContext;
     }
 
     public int getRevisionCount() {
