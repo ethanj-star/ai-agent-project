@@ -98,7 +98,7 @@
 
     .status-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(7, minmax(0, 1fr));
       gap: 8px;
       min-width: min(760px, 100%);
     }
@@ -211,6 +211,16 @@
       background: #b7791f;
     }
 
+    button.danger {
+      background: #b42318;
+    }
+
+    button.tiny {
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -236,6 +246,51 @@
     .badge.error {
       background: #ffebe9;
       color: var(--danger);
+    }
+
+    .badge.long-term {
+      background: #e7f0ff;
+      color: #1d4ed8;
+    }
+
+    .badge.short-term {
+      background: #fff5db;
+      color: var(--warn);
+    }
+
+    .memory-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .memory-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 9px 10px;
+      background: #fff;
+    }
+
+    .memory-main {
+      min-width: 0;
+    }
+
+    .memory-value {
+      margin-top: 5px;
+      word-break: break-word;
+    }
+
+    .memory-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
     }
 
     .message {
@@ -357,7 +412,7 @@
   <div class="topbar">
     <div>
       <h1>Agent Lab</h1>
-      <div class="subtle">开发调试模式：后端重启后 requirementId、planId 和版本记录会丢失。</div>
+      <div class="subtle">开发调试模式：当前使用 MySQL/JDBC 持久化；sessionId 临时充当 userId。</div>
     </div>
     <div class="status-grid">
       <div class="status-item">
@@ -379,6 +434,14 @@
       <div class="status-item">
         <span>Credits</span>
         <strong id="creditsLabel">-</strong>
+      </div>
+      <div class="status-item">
+        <span>Memories</span>
+        <strong id="memoryCountLabel">0</strong>
+      </div>
+      <div class="status-item">
+        <span>Persistence</span>
+        <strong id="persistenceLabel">jdbc</strong>
       </div>
     </div>
   </div>
@@ -403,7 +466,72 @@
     </div>
 
     <div class="panel">
-      <h2>2. 需求表编辑</h2>
+      <h2>2. 用户记忆</h2>
+      <div class="grid-2">
+        <div>
+          <label for="memoryScopeFilter">记忆范围</label>
+          <select id="memoryScopeFilter">
+            <option value="">全部</option>
+            <option value="LONG_TERM">LONG_TERM</option>
+            <option value="SHORT_TERM">SHORT_TERM</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button id="loadMemoriesBtn" class="secondary" style="width:100%;">刷新记忆</button>
+        </div>
+      </div>
+
+      <h3>新增记忆</h3>
+      <div class="grid-2">
+        <div>
+          <label for="memoryScopeInput">scope</label>
+          <select id="memoryScopeInput">
+            <option value="LONG_TERM">LONG_TERM</option>
+            <option value="SHORT_TERM">SHORT_TERM</option>
+          </select>
+        </div>
+        <div>
+          <label for="memoryTypeInput">type</label>
+          <select id="memoryTypeInput">
+            <option value="PREFERENCE">PREFERENCE</option>
+            <option value="CONSTRAINT">CONSTRAINT</option>
+            <option value="FACT">FACT</option>
+            <option value="HISTORY">HISTORY</option>
+            <option value="SYSTEM">SYSTEM</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:10px;">
+        <div>
+          <label for="memoryKeyInput">key</label>
+          <input id="memoryKeyInput" value="accommodationPreference">
+        </div>
+        <div>
+          <label for="memorySourceInput">source</label>
+          <select id="memorySourceInput">
+            <option value="USER_EXPLICIT">USER_EXPLICIT</option>
+            <option value="MANUAL">MANUAL</option>
+            <option value="PLAN_FEEDBACK">PLAN_FEEDBACK</option>
+            <option value="CONFIRMED_REQUIREMENT">CONFIRMED_REQUIREMENT</option>
+            <option value="SYSTEM_EVENT">SYSTEM_EVENT</option>
+          </select>
+        </div>
+      </div>
+      <label for="memoryValueInput" style="margin-top:10px;">value</label>
+      <input id="memoryValueInput" value="不住青旅">
+      <div class="actions">
+        <button id="saveMemoryBtn">保存记忆</button>
+        <button class="secondary" id="memoryExampleHotelBtn">不住青旅</button>
+        <button class="secondary" id="memoryExampleTrainBtn">偏好火车</button>
+        <button class="secondary" id="memoryExampleCrowdBtn">避开人多</button>
+      </div>
+      <div id="memoryMessage" class="message">长期记忆会影响后续规划；短期记忆只用于当前会话。</div>
+      <div id="memoryList" class="memory-list"></div>
+    </div>
+
+    <div class="panel">
+      <h2>3. 需求表编辑</h2>
       <div class="grid-2">
         <div>
           <label for="destinationsInput">目的地，逗号分隔</label>
@@ -487,7 +615,7 @@
 
   <section class="stack">
     <div class="panel">
-      <h2>3. 规划结果</h2>
+      <h2>4. 规划结果</h2>
       <div class="actions" style="margin-top:0;margin-bottom:10px;">
         <button class="secondary" id="loadPlanBtn">刷新当前计划</button>
         <button class="secondary" id="loadV1Btn">查看 v1</button>
@@ -498,7 +626,7 @@
     </div>
 
     <div class="panel">
-      <h2>4. 自然语言修改</h2>
+      <h2>5. 自然语言修改</h2>
       <label for="modifyInput">修改指令</label>
       <textarea id="modifyInput">第三天太赶了，少安排一个城市，多留一点自由时间</textarea>
       <div class="actions">
@@ -511,7 +639,7 @@
     </div>
 
     <div class="panel">
-      <h2>5. 原始 JSON</h2>
+      <h2>6. 原始 JSON</h2>
       <pre id="jsonBox" class="json-box">暂无响应。</pre>
     </div>
   </section>
@@ -528,6 +656,9 @@
     validation: null,
     graphResult: null,
     currentAnswer: null,
+    memories: [],
+    memoryScopeFilter: "",
+    persistenceMode: "jdbc",
     lastRawResponse: null,
     loading: false
   };
@@ -550,7 +681,13 @@
     travelStyle: el("travelStyleInput"),
     accommodation: el("accommodationInput"),
     transport: el("transportInput"),
-    modifyInput: el("modifyInput")
+    modifyInput: el("modifyInput"),
+    memoryScopeFilter: el("memoryScopeFilter"),
+    memoryScope: el("memoryScopeInput"),
+    memoryType: el("memoryTypeInput"),
+    memoryKey: el("memoryKeyInput"),
+    memoryValue: el("memoryValueInput"),
+    memorySource: el("memorySourceInput")
   };
 
   function setLoading(value, label) {
@@ -738,6 +875,7 @@
         body: JSON.stringify({ spec: readSpecFromForm() })
       });
       applyDraftResponse(data);
+      await loadMemories(false);
       showMessage("draftMessage", "需求表已确认，可以生成完整规划。", "ok");
     } catch (error) {
       if (error.body?.spec || error.body?.validation) {
@@ -774,6 +912,83 @@
       if (error.body?.graphResult?.answer) {
         renderAnswer(error.body.graphResult.answer);
       }
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function loadMemories(showUserMessage = true) {
+    state.sessionId = fields.sessionInput.value.trim() || state.sessionId || "test-006";
+    state.memoryScopeFilter = fields.memoryScopeFilter.value || "";
+    const params = new URLSearchParams({ sessionId: state.sessionId });
+    if (state.memoryScopeFilter) {
+      params.set("scope", state.memoryScopeFilter);
+    }
+
+    setLoading(true, "读取用户记忆中...");
+    try {
+      const data = await api(`/api/v1/memories?${params.toString()}`);
+      state.memories = Array.isArray(data.memories) ? data.memories : [];
+      renderMemories();
+      if (showUserMessage) {
+        showMessage("memoryMessage", data.assistantMessage || "已刷新用户记忆。", state.memories.length ? "ok" : "");
+      }
+    } catch (error) {
+      showMessage("memoryMessage", error.message || "读取记忆失败。", "error");
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function saveMemory() {
+    state.sessionId = fields.sessionInput.value.trim() || state.sessionId || "test-006";
+    const key = fields.memoryKey.value.trim();
+    const value = fields.memoryValue.value.trim();
+    if (!key || !value) {
+      showMessage("memoryMessage", "记忆 key 和 value 不能为空。", "error");
+      return;
+    }
+
+    setLoading(true, "保存用户记忆中...");
+    try {
+      const data = await api("/api/v1/memories", {
+        method: "POST",
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          scope: fields.memoryScope.value,
+          type: fields.memoryType.value,
+          key,
+          value,
+          source: fields.memorySource.value
+        })
+      });
+      state.memories = Array.isArray(data.memories) ? data.memories : state.memories;
+      fields.memoryScopeFilter.value = "";
+      state.memoryScopeFilter = "";
+      renderMemories();
+      showMessage("memoryMessage", data.assistantMessage || "已保存用户记忆。", "ok");
+    } catch (error) {
+      showMessage("memoryMessage", error.message || "保存记忆失败。", "error");
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function deactivateMemory(memoryId) {
+    if (!memoryId) return;
+    setLoading(true, "禁用用户记忆中...");
+    try {
+      const data = await api(`/api/v1/memories/${encodeURIComponent(memoryId)}`, {
+        method: "DELETE"
+      });
+      state.memories = state.memories.filter((memory) => memory.memoryId !== memoryId);
+      renderMemories();
+      showMessage("memoryMessage", data.assistantMessage || "已禁用用户记忆。", "ok");
+    } catch (error) {
+      showMessage("memoryMessage", error.message || "禁用记忆失败。", "error");
     } finally {
       setLoading(false);
       renderStatus();
@@ -911,6 +1126,69 @@
     `;
   }
 
+  function renderMemories() {
+    const list = el("memoryList");
+    if (!state.memories || state.memories.length === 0) {
+      list.innerHTML = '<div class="message">当前没有生效记忆。</div>';
+      renderStatus();
+      return;
+    }
+
+    list.innerHTML = state.memories.map((memory) => {
+      const scope = memory.scope || "UNKNOWN";
+      const type = memory.type || "UNKNOWN";
+      const badgeClass = scope === "LONG_TERM" ? "long-term" : scope === "SHORT_TERM" ? "short-term" : "";
+      const confidence = memory.confidence ?? "-";
+      return `
+        <div class="memory-item">
+          <div class="memory-main">
+            <div>
+              <span class="badge ${badgeClass}">${escapeHtml(scope)}</span>
+              <span class="badge">${escapeHtml(type)}</span>
+            </div>
+            <div class="memory-value">
+              <strong>${escapeHtml(memory.key || "-")}</strong>
+              <span>=</span>
+              <span>${escapeHtml(memory.value || "-")}</span>
+            </div>
+            <div class="memory-meta">
+              <span>source: ${escapeHtml(memory.source || "-")}</span>
+              <span>confidence: ${escapeHtml(confidence)}</span>
+              <span title="${escapeHtml(memory.memoryId || "")}">id: ${escapeHtml(shortId(memory.memoryId))}</span>
+            </div>
+          </div>
+          <button class="secondary tiny memory-disable-btn" data-memory-id="${escapeHtml(memory.memoryId || "")}">禁用</button>
+        </div>
+      `;
+    }).join("");
+    renderStatus();
+  }
+
+  function shortId(value) {
+    if (!value) return "-";
+    return value.length <= 14 ? value : `${value.slice(0, 10)}...`;
+  }
+
+  function fillMemoryExample(kind) {
+    fields.memoryScope.value = "LONG_TERM";
+    fields.memoryType.value = "PREFERENCE";
+    fields.memorySource.value = "USER_EXPLICIT";
+    if (kind === "hotel") {
+      fields.memoryKey.value = "accommodationPreference";
+      fields.memoryValue.value = "不住青旅";
+      return;
+    }
+    if (kind === "train") {
+      fields.memoryKey.value = "transportPreference";
+      fields.memoryValue.value = "偏好火车";
+      return;
+    }
+    if (kind === "crowd") {
+      fields.memoryKey.value = "avoidances";
+      fields.memoryValue.value = "避开人多";
+    }
+  }
+
   function renderAnswer(answer) {
     el("answerBox").textContent = answer || "暂无规划结果。";
     el("resultMeta").textContent = `planId=${state.planId || "-"} · version=${state.currentVersion || "-"} · requirementId=${state.requirementId || "-"}`;
@@ -929,6 +1207,8 @@
     el("planLabel").textContent = state.planId || "-";
     el("versionLabel").textContent = state.currentVersion ? `v${state.currentVersion}` : "-";
     el("creditsLabel").textContent = state.remainingCredits ?? "-";
+    el("memoryCountLabel").textContent = state.memories?.length ?? 0;
+    el("persistenceLabel").textContent = state.persistenceMode || "jdbc";
 
     el("saveBtn").disabled = state.loading || !state.requirementId;
     el("confirmBtn").disabled = state.loading || !state.requirementId;
@@ -937,6 +1217,8 @@
     el("loadV1Btn").disabled = state.loading || !state.planId;
     el("copyAnswerBtn").disabled = state.loading || !state.currentAnswer;
     el("modifyBtn").disabled = state.loading || !state.planId;
+    el("loadMemoriesBtn").disabled = state.loading;
+    el("saveMemoryBtn").disabled = state.loading;
   }
 
   function showMessage(id, text, type = "") {
@@ -961,6 +1243,7 @@
     renderJson(undefined);
     showMessage("draftMessage", "状态已清空，可以重新整理需求表。");
     showMessage("modifyMessage", "生成 planId 后，可以在这里测试计划版本化修改。");
+    showMessage("memoryMessage", "已清空计划调试状态，用户记忆保留。");
     renderStatus();
   }
 
@@ -992,6 +1275,18 @@
   el("modifyBtn").addEventListener("click", modifyPlan);
   el("copyAnswerBtn").addEventListener("click", copyAnswer);
   el("resetBtn").addEventListener("click", resetState);
+  el("loadMemoriesBtn").addEventListener("click", () => loadMemories(true));
+  el("saveMemoryBtn").addEventListener("click", saveMemory);
+  el("memoryExampleHotelBtn").addEventListener("click", () => fillMemoryExample("hotel"));
+  el("memoryExampleTrainBtn").addEventListener("click", () => fillMemoryExample("train"));
+  el("memoryExampleCrowdBtn").addEventListener("click", () => fillMemoryExample("crowd"));
+
+  fields.memoryScopeFilter.addEventListener("change", () => loadMemories(true));
+  el("memoryList").addEventListener("click", (event) => {
+    const button = event.target.closest(".memory-disable-btn");
+    if (!button) return;
+    deactivateMemory(button.dataset.memoryId);
+  });
 
   el("exampleCompleteBtn").addEventListener("click", () => {
     fields.naturalInput.value = "国庆去法国和意大利玩10天，预算1200欧，不含国际机票，2个人，从上海出发，想避开人多的地方";
@@ -1011,6 +1306,8 @@
 
   fields.sessionInput.addEventListener("input", renderStatus);
   renderStatus();
+  renderMemories();
+  loadMemories(false);
 </script>
 </body>
 </html>
