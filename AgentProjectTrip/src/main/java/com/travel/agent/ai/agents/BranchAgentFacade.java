@@ -3,10 +3,17 @@ package com.travel.agent.ai.agents;
 import com.travel.agent.ai.graph.model.BranchResult;
 import com.travel.agent.ai.graph.model.BranchTask;
 import com.travel.agent.ai.graph.model.BranchTaskType;
+import com.travel.agent.ai.graph.model.FlightSearchRequest;
+import com.travel.agent.ai.graph.model.HotelSearchRequest;
+import com.travel.agent.ai.graph.node.FlightSearchParamResolver;
+import com.travel.agent.ai.graph.node.HotelSearchParamResolver;
+import com.travel.agent.ai.tools.FlightTools;
 import com.travel.agent.ai.tools.KnowledgeTools;
 import com.travel.agent.ai.tools.PlacesTools;
 import com.travel.agent.ai.tools.WeatherTools;
 import com.travel.agent.core.dto.AttractionDTO;
+import com.travel.agent.core.dto.FlightDTO;
+import com.travel.agent.core.dto.HotelDTO;
 import com.travel.agent.core.dto.WeatherDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +41,8 @@ import java.util.stream.Collectors;
  * </ul>
  * </p>
  *
- * <p>第三阶段第一版采用顺序、轻量的执行方式；航班分支暂时只返回降级结果，
- * 等后续具备机场代码和日期解析能力后再接入真实航班查询。</p>
+ * <p>第十二阶段开始，航班和酒店分支会真实调用外部工具；参数缺失或 API 失败时，
+ * 仍返回失败型 BranchResult，提醒 Planner 不要伪造实时价格、库存或可售状态。</p>
  */
 @Service
 public class BranchAgentFacade {
@@ -44,6 +51,9 @@ public class BranchAgentFacade {
 
     /** 单个分支最多查询的代表城市数量，避免一次请求触发过多外部 API 调用。 */
     private static final int MAX_TOOL_CITY_QUERIES = 3;
+
+    /** 酒店分支最多查询的代表城市数量，住宿价格只做预算参考，不需要覆盖所有停留点。 */
+    private static final int MAX_HOTEL_CITY_QUERIES = 2;
 
     /** 天气查询失败时 WeatherService 返回的描述，用于判断该结果不可作为实时天气引用。 */
     private static final String WEATHER_FAILURE_DESCRIPTION = "获取天气失败";
@@ -125,6 +135,7 @@ public class BranchAgentFacade {
             Map.entry("柏林", "Berlin")
     );
 
+    private final FlightTools flightTools;
     private final WeatherTools weatherTools;
     private final PlacesTools placesTools;
     private final KnowledgeTools knowledgeTools;
@@ -132,13 +143,16 @@ public class BranchAgentFacade {
     /**
      * 构造器注入当前已经存在的工具桥接器。
      *
+     * @param flightTools    航班工具桥接器，负责真实航班查询
      * @param weatherTools   天气工具桥接器
-     * @param placesTools    景点/地点工具桥接器
+     * @param placesTools    景点/酒店工具桥接器
      * @param knowledgeTools 私有知识库检索工具桥接器
      */
-    public BranchAgentFacade(WeatherTools weatherTools,
+    public BranchAgentFacade(FlightTools flightTools,
+                             WeatherTools weatherTools,
                              PlacesTools placesTools,
                              KnowledgeTools knowledgeTools) {
+        this.flightTools = flightTools;
         this.weatherTools = weatherTools;
         this.placesTools = placesTools;
         this.knowledgeTools = knowledgeTools;
@@ -169,8 +183,9 @@ public class BranchAgentFacade {
             return switch (task.getType()) {
                 case WEATHER -> executeWeather(task);
                 case PLACES -> executePlaces(task);
+                case HOTEL -> executeHotel(task);
                 case KNOWLEDGE -> executeKnowledge(task);
-                case FLIGHT -> executeFlightFallback(task);
+                case FLIGHT -> executeFlight(task);
             };
         } catch (Exception e) {
             // 单个工具失败不应该打断完整行程规划；失败会被包装成 BranchResult 交给 Planner 显式说明风险。
@@ -258,6 +273,113 @@ public class BranchAgentFacade {
     }
 
     /**
+     * 执行航班分支。
+     *
+     * <p>处理流程：
+     * <ol>
+     *   <li>使用 FlightSearchParamResolver 把任务中的出发地、目的地和日期转成工具参数。</li>
+     *   <li>参数完整时调用 FlightTools.searchFlights(...)。</li>
+     *   <li>把最多三条航班候选压缩为 Planner 可读摘要。</li>
+     *   <li>参数缺失、工具未配置或 API 空结果时返回失败 BranchResult，不伪造航班价格。</li>
+     * </ol>
+     * </p>
+     */
+    private BranchResult executeFlight(BranchTask task) {
+        if (flightTools == null) {
+            return BranchResult.failure(task,
+                    "航班分支未配置真实航班工具，Planner 不应生成实时航班号、票价或可售状态。",
+                    "FlightTools bean is missing");
+        }
+
+        FlightSearchRequest request = FlightSearchParamResolver.resolve(task);
+        if (!request.queryable()) {
+            return BranchResult.failure(task,
+                    "航班分支未获得可用实时结果：" + request.missingReason()
+                            + " Planner 不应编造航班号、实时票价或可售状态。",
+                    request.missingReason());
+        }
+
+        List<FlightDTO> flights = flightTools.searchFlights(
+                request.originCode(),
+                request.destinationCode(),
+                request.departureDate());
+        if (flights == null || flights.isEmpty()) {
+            return BranchResult.failure(task,
+                    "航班分支没有查到可用航班结果，Planner 只能给常规抵离建议，不应编造实时票价。",
+                    "empty flights for " + request.sourceDescription());
+        }
+
+        String summary = "航班参考（" + request.sourceDescription() + "）："
+                + flights.stream()
+                .limit(3)
+                .map(BranchAgentFacade::formatFlight)
+                .collect(Collectors.joining("；"));
+        if (Boolean.FALSE.equals(task.getBudgetIncludesInternationalFlight())) {
+            summary += "。用户已说明预算不含国际机票，Planner 只能把该航班信息作为抵离路线参考，不应计入旅行预算。";
+        }
+        return BranchResult.success(task, summary, flights.toString());
+    }
+
+    /**
+     * 执行酒店分支。
+     *
+     * <p>处理流程：
+     * <ol>
+     *   <li>使用 HotelSearchParamResolver 推导城市、入住日期和退房日期。</li>
+     *   <li>最多查询两个代表城市，控制外部 API 调用次数。</li>
+     *   <li>把酒店名称、每晚价格和评分压缩为 Planner 可读摘要。</li>
+     *   <li>参数缺失或 API 空结果时返回失败 BranchResult，不伪造酒店价格或库存。</li>
+     * </ol>
+     * </p>
+     */
+    private BranchResult executeHotel(BranchTask task) {
+        List<HotelSearchRequest> requests = HotelSearchParamResolver.resolve(task, MAX_HOTEL_CITY_QUERIES);
+        if (requests.isEmpty() || requests.stream().noneMatch(HotelSearchRequest::queryable)) {
+            String reason = requests.isEmpty() ? "酒店查询缺少可用参数。" : requests.get(0).missingReason();
+            return BranchResult.failure(task,
+                    "酒店分支未获得可用实时结果：" + reason
+                            + " Planner 不应编造酒店价格、评分或库存状态。",
+                    reason);
+        }
+
+        List<String> summaries = new ArrayList<>();
+        List<String> rawData = new ArrayList<>();
+        List<String> failures = new ArrayList<>();
+        for (HotelSearchRequest request : requests) {
+            if (!request.queryable()) {
+                failures.add(request.missingReason());
+                continue;
+            }
+            List<HotelDTO> hotels = placesTools.searchHotels(
+                    request.city(),
+                    request.checkInDate(),
+                    request.checkOutDate());
+            if (hotels == null || hotels.isEmpty()) {
+                failures.add(request.city());
+                continue;
+            }
+            summaries.add(request.sourceDescription() + "："
+                    + hotels.stream()
+                    .limit(3)
+                    .map(BranchAgentFacade::formatHotel)
+                    .collect(Collectors.joining("；")));
+            rawData.add(request.city() + "=" + hotels);
+        }
+
+        if (summaries.isEmpty()) {
+            return BranchResult.failure(task,
+                    "酒店分支没有查到可用酒店结果，Planner 只能给常规住宿建议，不应编造实时价格或库存。",
+                    "empty hotels for " + failures);
+        }
+
+        String summary = "酒店参考（按代表城市查询）：" + String.join("；", summaries);
+        if (!failures.isEmpty()) {
+            summary += "。部分酒店查询暂不可用：" + String.join("、", failures) + "。";
+        }
+        return BranchResult.success(task, summary, String.join("\n", rawData));
+    }
+
+    /**
      * 执行知识库分支。
      */
     private BranchResult executeKnowledge(BranchTask task) {
@@ -272,16 +394,6 @@ public class BranchAgentFacade {
             return BranchResult.failure(task, "知识分支没有返回可用内容。", "empty knowledge result");
         }
         return BranchResult.success(task, "知识库参考已检索，可用于防坑、交通和 POI 细化。", guide);
-    }
-
-    /**
-     * 航班分支第一版降级处理。
-     */
-    private static BranchResult executeFlightFallback(BranchTask task) {
-        // 航班查询需要机场代码、日期窗口和供应商能力；当前阶段宁可明确不可用，也不伪造票价。
-        return BranchResult.failure(task,
-                "航班分支第一版暂未启用真实查询；Planner 不应生成具体航班号、实时票价或可售状态。",
-                "flight branch is not enabled in phase 3 slice 1");
     }
 
     private static String firstDestinationOrQuery(BranchTask task) {
@@ -372,5 +484,37 @@ public class BranchAgentFacade {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static String formatFlight(FlightDTO flight) {
+        if (flight == null) {
+            return "未知航班";
+        }
+        return defaultText(flight.airline(), "未知航司")
+                + " " + flight.origin() + "->" + flight.destination()
+                + " " + formatEuroPrice(flight.priceEuros());
+    }
+
+    private static String formatHotel(HotelDTO hotel) {
+        if (hotel == null) {
+            return "未知酒店";
+        }
+        return defaultText(hotel.name(), "未知酒店")
+                + "(" + defaultText(hotel.price(), "价格未知")
+                + ", " + hotel.rating() + "分)";
+    }
+
+    private static String formatEuroPrice(double price) {
+        if (price <= 0) {
+            return "价格未知";
+        }
+        if (price == Math.rint(price)) {
+            return "约" + (long) price + "EUR";
+        }
+        return "约" + String.format(Locale.ROOT, "%.2fEUR", price);
+    }
+
+    private static String defaultText(String value, String fallback) {
+        return hasText(value) ? value.trim() : fallback;
     }
 }

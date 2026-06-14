@@ -1,5 +1,8 @@
 package com.travel.agent.ai.graph.model;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,9 +13,9 @@ import java.util.List;
  *
  * <p>职责：
  * <ul>
- *   <li>承载分支任务类型、查询文本、目的地、时间和约束条件。</li>
+ *   <li>承载分支任务类型、查询文本、目的地、时间、日期、出发地和约束条件。</li>
  *   <li>让 Graph 节点只传递稳定协议，不直接绑定某个具体工具方法。</li>
- *   <li>为后续并行执行、任务重试和任务追踪预留 taskId。</li>
+ *   <li>为后续并行执行、任务重试、任务追踪和模型分支 Agent 预留 taskId。</li>
  * </ul>
  * </p>
  */
@@ -32,6 +35,22 @@ public class BranchTask {
 
     /** 当前任务涉及的出行时间。 */
     private String travelTime;
+
+    /** 已解析出的出发日期；航班和酒店真实工具优先使用该字段。 */
+    @JsonFormat(pattern = "yyyy-MM-dd")
+    private LocalDate startDate;
+
+    /** 行程总天数；酒店分支用它推导退房日期。 */
+    private Integer durationDays;
+
+    /** 出发城市；航班分支用它解析出发机场代码。 */
+    private String departureCity;
+
+    /** 住宿偏好；酒店分支用它判断是否需要住宿价格参考。 */
+    private String accommodationPreference;
+
+    /** 预算是否包含国际机票；Planner 用它决定航班价格是否进入预算。 */
+    private Boolean budgetIncludesInternationalFlight;
 
     /** 用户偏好、预算、避开人流等补充约束。 */
     private List<String> constraints = new ArrayList<>();
@@ -54,6 +73,25 @@ public class BranchTask {
         setDestinations(destinations);
         this.travelTime = travelTime;
         setConstraints(constraints);
+    }
+
+    public BranchTask(String taskId,
+                      BranchTaskType type,
+                      String query,
+                      List<String> destinations,
+                      String travelTime,
+                      List<String> constraints,
+                      LocalDate startDate,
+                      Integer durationDays,
+                      String departureCity,
+                      String accommodationPreference,
+                      Boolean budgetIncludesInternationalFlight) {
+        this(taskId, type, query, destinations, travelTime, constraints);
+        this.startDate = startDate;
+        this.durationDays = durationDays;
+        this.departureCity = cleanText(departureCity);
+        this.accommodationPreference = cleanText(accommodationPreference);
+        this.budgetIncludesInternationalFlight = budgetIncludesInternationalFlight;
     }
 
     public String getTaskId() {
@@ -97,6 +135,46 @@ public class BranchTask {
         this.travelTime = travelTime;
     }
 
+    public LocalDate getStartDate() {
+        return startDate;
+    }
+
+    public void setStartDate(LocalDate startDate) {
+        this.startDate = startDate;
+    }
+
+    public Integer getDurationDays() {
+        return durationDays;
+    }
+
+    public void setDurationDays(Integer durationDays) {
+        this.durationDays = durationDays;
+    }
+
+    public String getDepartureCity() {
+        return departureCity;
+    }
+
+    public void setDepartureCity(String departureCity) {
+        this.departureCity = cleanText(departureCity);
+    }
+
+    public String getAccommodationPreference() {
+        return accommodationPreference;
+    }
+
+    public void setAccommodationPreference(String accommodationPreference) {
+        this.accommodationPreference = cleanText(accommodationPreference);
+    }
+
+    public Boolean getBudgetIncludesInternationalFlight() {
+        return budgetIncludesInternationalFlight;
+    }
+
+    public void setBudgetIncludesInternationalFlight(Boolean budgetIncludesInternationalFlight) {
+        this.budgetIncludesInternationalFlight = budgetIncludesInternationalFlight;
+    }
+
     public List<String> getConstraints() {
         return constraints;
     }
@@ -104,5 +182,9 @@ public class BranchTask {
     public void setConstraints(List<String> constraints) {
         // 约束为空时代表“没有额外限制”，用空列表比 null 更适合遍历和拼 prompt。
         this.constraints = constraints == null ? new ArrayList<>() : constraints;
+    }
+
+    private static String cleanText(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

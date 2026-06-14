@@ -17,8 +17,17 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
@@ -65,6 +74,7 @@ button.secondary:hover:not(:disabled) {
 input,
 select,
 textarea {
+  min-width: 0;
   width: 100%;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
@@ -108,9 +118,14 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
   max-width: 1440px;
   margin: 0 auto;
   padding: 12px 20px;
+}
+
+.topbar > * {
+  min-width: 0;
 }
 
 .eyebrow,
@@ -141,7 +156,8 @@ h2 {
   display: grid;
   grid-template-columns: repeat(5, minmax(112px, 1fr));
   gap: 8px;
-  min-width: min(820px, 100%);
+  min-width: 0;
+  width: min(820px, 100%);
 }
 
 .status-pill {
@@ -167,6 +183,8 @@ h2 {
 }
 
 .app-shell {
+  width: 100%;
+  min-width: 0;
   max-width: 1440px;
   margin: 0 auto;
   padding: 16px 20px 28px;
@@ -174,6 +192,8 @@ h2 {
 
 .workflow-panel,
 .panel {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--panel);
@@ -186,15 +206,19 @@ h2 {
 
 .grid-layout {
   display: grid;
-  grid-template-columns: minmax(340px, 500px) minmax(480px, 1fr);
+  grid-template-columns: minmax(320px, 500px) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .left-column,
 .right-column {
   display: grid;
   gap: 16px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .section-heading {
@@ -220,6 +244,7 @@ h2 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
   margin-top: 10px;
 }
 
@@ -231,6 +256,7 @@ h2 {
   min-height: 20px;
   margin: 10px 0 0;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .message-line.error {
@@ -242,11 +268,13 @@ h2 {
 }
 
 .notice {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
   margin-bottom: 12px;
   background: var(--soft);
+  overflow-wrap: anywhere;
 }
 
 .notice.ok {
@@ -275,12 +303,14 @@ h2 {
 .subtle {
   margin: 8px 0 0;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+  min-width: 0;
 }
 
 .form-group-title {
@@ -295,6 +325,7 @@ h2 {
 .field {
   display: grid;
   gap: 5px;
+  min-width: 0;
 }
 
 .field span {
@@ -311,6 +342,7 @@ h2 {
   min-height: 16px;
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .field-hint.error {
@@ -337,6 +369,7 @@ h2 {
   margin: 8px 0 0;
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .confirm-reason.ok {
@@ -352,6 +385,8 @@ h2 {
 }
 
 .progress-box {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 12px;
@@ -363,6 +398,7 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  min-width: 0;
 }
 
 .job-status-badge {
@@ -410,10 +446,15 @@ h2 {
 }
 
 .job-meta span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 2px 8px;
   background: #fff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .progress-track {
@@ -484,6 +525,7 @@ h2 {
   margin-top: 10px;
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .job-advice strong {
@@ -506,6 +548,8 @@ h2 {
 .recent-jobs {
   display: grid;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   margin-top: 10px;
 }
 
@@ -517,10 +561,12 @@ h2 {
 
 .recent-job {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px;
   align-items: center;
+  min-width: 0;
   width: 100%;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px;
@@ -563,11 +609,14 @@ h2 {
   min-height: 320px;
   max-height: 720px;
   overflow: auto;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 14px;
   background: #fbfcfe;
   white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .answer-box.empty,
@@ -586,16 +635,25 @@ h2 {
 
 .answer-box p {
   margin: 8px 0;
+  overflow-wrap: anywhere;
 }
 
 .answer-box ul {
   padding-left: 20px;
 }
 
+.answer-box li,
+.answer-box h1,
+.answer-box h2,
+.answer-box h3 {
+  overflow-wrap: anywhere;
+}
+
 .version-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
   margin-top: 10px;
 }
 
@@ -618,20 +676,23 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 1.3fr auto;
   gap: 8px;
+  min-width: 0;
 }
 
 .list-box {
   display: grid;
   gap: 8px;
+  min-width: 0;
   min-height: 88px;
   margin-top: 10px;
 }
 
 .memory-item {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px;
@@ -645,6 +706,7 @@ h2 {
 .memory-item span {
   color: var(--muted);
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .debug-panel summary {
@@ -654,6 +716,8 @@ h2 {
 
 .debug-panel pre {
   overflow: auto;
+  min-width: 0;
+  max-width: 100%;
   max-height: 420px;
   margin: 12px 0 0;
   border: 1px solid var(--line);
@@ -662,6 +726,8 @@ h2 {
   background: #111827;
   color: #e5e7eb;
   font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 1100px) {

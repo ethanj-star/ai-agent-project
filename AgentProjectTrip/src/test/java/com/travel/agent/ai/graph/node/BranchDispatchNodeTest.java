@@ -2,8 +2,11 @@ package com.travel.agent.ai.graph.node;
 
 import com.travel.agent.ai.graph.model.BranchTaskType;
 import com.travel.agent.ai.graph.model.TravelPlanState;
+import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -68,6 +71,63 @@ class BranchDispatchNodeTest {
         assertThat(result.getBranchTasks())
                 .extracting("type")
                 .contains(BranchTaskType.FLIGHT);
+    }
+
+    /**
+     * 已确认需求表具备出发地、日期、天数和预算时，应派发酒店和航班分支作为真实价格参考。
+     */
+    @Test
+    void dispatchCreatesFlightAndHotelTasksFromStructuredRequirement() {
+        TravelRequirementSpec spec = new TravelRequirementSpec();
+        spec.setDestinations(List.of("法国", "意大利"));
+        spec.setDepartureCity("上海");
+        spec.setStartDate(LocalDate.of(2026, 10, 1));
+        spec.setDurationDays(10);
+        spec.setBudgetAmount(BigDecimal.valueOf(2000));
+        spec.setBudgetCurrency("EUR");
+        spec.setAccommodationPreference("经济酒店");
+        spec.setBudgetIncludesInternationalFlight(false);
+
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("请根据已确认需求生成完整行程");
+        state.setRequirementSpec(spec);
+        state.setDestinations(spec.getDestinations());
+        state.setTravelTime("2026-10-01");
+        state.setDurationDays(10);
+        state.setKeywords(List.of("预算2000EUR", "经济酒店"));
+
+        TravelPlanState result = node.dispatch(state);
+
+        assertThat(result.getBranchTasks())
+                .extracting("type")
+                .contains(BranchTaskType.FLIGHT, BranchTaskType.HOTEL);
+        assertThat(result.getBranchTasks())
+                .filteredOn(task -> task.getType() == BranchTaskType.FLIGHT)
+                .first()
+                .satisfies(task -> {
+                    assertThat(task.getDepartureCity()).isEqualTo("上海");
+                    assertThat(task.getStartDate()).isEqualTo(LocalDate.of(2026, 10, 1));
+                    assertThat(task.getDurationDays()).isEqualTo(10);
+                    assertThat(task.getBudgetIncludesInternationalFlight()).isFalse();
+                });
+    }
+
+    /**
+     * 用户明确提到住宿时，即使还没进入模型派发阶段，也应生成 HOTEL 分支任务。
+     */
+    @Test
+    void dispatchCreatesHotelTaskForAccommodationNeed() {
+        TravelPlanState state = new TravelPlanState();
+        state.setUserQuery("国庆去法国玩10天，想住便宜酒店");
+        state.setDestinations(List.of("法国"));
+        state.setTravelTime("国庆");
+        state.setKeywords(List.of("便宜酒店"));
+
+        TravelPlanState result = node.dispatch(state);
+
+        assertThat(result.getBranchTasks())
+                .extracting("type")
+                .contains(BranchTaskType.HOTEL);
     }
 
     /**

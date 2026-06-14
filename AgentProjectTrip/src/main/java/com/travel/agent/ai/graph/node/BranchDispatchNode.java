@@ -3,6 +3,7 @@ package com.travel.agent.ai.graph.node;
 import com.travel.agent.ai.graph.model.BranchTask;
 import com.travel.agent.ai.graph.model.BranchTaskType;
 import com.travel.agent.ai.graph.model.TravelPlanState;
+import com.travel.agent.ai.graph.model.TravelRequirementSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -18,8 +19,8 @@ import java.util.Locale;
  *
  * <p>职责：
  * <ul>
- *   <li>读取 {@link TravelPlanState} 中的用户原文、目的地、时间和关键词。</li>
- *   <li>用低成本 Java 规则生成天气、景点、知识库或航班分支任务。</li>
+ *   <li>读取 {@link TravelPlanState} 中的用户原文、结构化需求表、目的地、时间和关键词。</li>
+ *   <li>用低成本 Java 规则生成天气、景点、知识库、航班或酒店分支任务。</li>
  *   <li>只写入 branchTasks，不调用模型或外部 API，保持编排和执行职责分离。</li>
  *   <li>识别“不含机票”等否定语义，避免用户只是排除预算项时误触发航班分支。</li>
  *   <li>只在用户明确需要当前/实时天气时派发 WEATHER，避免把当前天气误用于未来旅行。</li>
@@ -58,8 +59,12 @@ public class BranchDispatchNode {
         if (hasDestinations(state) && looksLikePlacesNeed(state)) {
             tasks.add(buildTask("places-1", BranchTaskType.PLACES, state));
         }
-        // 航班任务只在正向查询时触发，“不含机票”这类预算边界会在 hasExplicitFlightNeed 中排除。
-        if (hasExplicitFlightNeed(state)) {
+        // 酒店分支在用户提到住宿，或需求表已经具备预算/日期/天数时触发，用真实价格辅助预算判断。
+        if (hasDestinations(state) && shouldDispatchHotel(state)) {
+            tasks.add(buildTask("hotel-1", BranchTaskType.HOTEL, state));
+        }
+        // 航班任务只在正向查询或结构化需求表具备完整航班查询骨架时触发。
+        if (shouldDispatchFlight(state)) {
             tasks.add(buildTask("flight-1", BranchTaskType.FLIGHT, state));
         }
 
@@ -71,14 +76,21 @@ public class BranchDispatchNode {
     }
 
     private static BranchTask buildTask(String taskId, BranchTaskType type, TravelPlanState state) {
-        // BranchTask 是 Graph 与分支 Agent 之间的稳定协议，只传分支执行需要的最小上下文。
+        // BranchTask 是 Graph 与分支 Agent 之间的稳定协议。
+        // 第十二阶段开始，航班和酒店工具需要明确日期、天数和出发地，因此从需求表同步强类型字段。
+        TravelRequirementSpec spec = state.getRequirementSpec();
         return new BranchTask(
                 taskId,
                 type,
                 state.getUserQuery(),
                 state.getDestinations(),
                 state.getTravelTime(),
-                state.getKeywords());
+                state.getKeywords(),
+                spec == null ? null : spec.getStartDate(),
+                state.getDurationDays(),
+                spec == null ? null : spec.getDepartureCity(),
+                spec == null ? null : spec.getAccommodationPreference(),
+                spec == null ? null : spec.getBudgetIncludesInternationalFlight());
     }
 
     private static boolean hasDestinations(TravelPlanState state) {
@@ -98,6 +110,40 @@ public class BranchDispatchNode {
                 || text.contains("小众")
                 || text.contains("人多")
                 || text.contains("避开");
+    }
+
+    /**
+     * 判断是否应该派发酒店分支。
+     *
+     * <p>酒店真实查询依赖目的地、日期和天数。用户明确提到住宿时会派发；
+     * 已确认需求表中有预算、日期和天数时，也可以派发酒店分支作为预算参考。</p>
+     */
+    private static boolean shouldDispatchHotel(TravelPlanState state) {
+        if (looksLikeHotelNeed(state)) {
+            return true;
+        }
+        TravelRequirementSpec spec = state.getRequirementSpec();
+        return spec != null
+                && spec.getStartDate() != null
+                && spec.getDurationDays() != null
+                && spec.getBudgetAmount() != null;
+    }
+
+    private static boolean looksLikeHotelNeed(TravelPlanState state) {
+        String text = joinedText(state).toLowerCase(Locale.ROOT);
+        TravelRequirementSpec spec = state.getRequirementSpec();
+        return hasText(spec == null ? null : spec.getAccommodationPreference())
+                || containsAny(text,
+                "酒店",
+                "住宿",
+                "住哪里",
+                "住哪",
+                "民宿",
+                "青旅",
+                "旅舍",
+                "hostel",
+                "hotel",
+                "accommodation");
     }
 
     /**
@@ -134,10 +180,27 @@ public class BranchDispatchNode {
      * <p>“不含国际机票”“预算不包括机票”这类表达只是在说明预算边界，
      * 不是请求系统查询航班，因此必须先识别否定/排除语义，再判断正向航班需求。</p>
      */
-    private static boolean hasExplicitFlightNeed(TravelPlanState state) {
+    private static boolean shouldDispatchFlight(TravelPlanState state) {
+        if (!hasDestinations(state)) {
+            return false;
+        }
         String text = joinedText(state).toLowerCase(Locale.ROOT);
-        // 先处理否定语义，再判断正向关键词，避免“预算不含机票”误触发航班查询。
+
+        // “不用查机票”这类表达是真正拒绝工具调用，优先级高于结构化字段。
         if (containsAny(text,
+                "不用查机票",
+                "不查机票",
+                "不用查航班",
+                "不查航班",
+                "不需要查机票",
+                "不需要查航班",
+                "不要查机票",
+                "不要查航班")) {
+            return false;
+        }
+
+        // “不含国际机票”只是预算口径，不是正向航班查询需求；如果后面有完整出发地和日期，仍可作为路线参考查询。
+        boolean budgetBoundaryOnly = containsAny(text,
                 "不含机票",
                 "不含国际机票",
                 "不包含机票",
@@ -146,17 +209,20 @@ public class BranchDispatchNode {
                 "不包含航班",
                 "不包括航班",
                 "机票自理",
-                "国际机票自理",
-                "不用查机票",
-                "不查机票",
-                "不需要机票",
-                "不需要航班")) {
-            return false;
+                "国际机票自理");
+        if (!budgetBoundaryOnly && containsAny(text, "机票", "航班", "机场", "flight")) {
+            return true;
         }
-        return text.contains("机票")
-                || text.contains("航班")
-                || text.contains("机场")
-                || text.contains("flight");
+        return hasStructuredFlightSkeleton(state);
+    }
+
+    private static boolean hasStructuredFlightSkeleton(TravelPlanState state) {
+        TravelRequirementSpec spec = state.getRequirementSpec();
+        return spec != null
+                && hasText(spec.getDepartureCity())
+                && spec.getStartDate() != null
+                && spec.getDestinations() != null
+                && !spec.getDestinations().isEmpty();
     }
 
     private static boolean containsAny(String text, String... candidates) {
