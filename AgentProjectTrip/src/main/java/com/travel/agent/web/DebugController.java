@@ -34,15 +34,18 @@ public class DebugController {
      */
     @GetMapping(value = "/gatekeeper", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> testGatekeeper(@RequestParam String message) {
+        // 调试接口也要先校验空消息，避免把无效输入直接送进模型。
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest()
                     .body("{\"error\":\"参数 message 不能为空\"}");
         }
 
         try {
+            // 原样返回 Gatekeeper 的 JSON，方便开发时观察意图分类和实体抽取是否正确。
             String routeJson = gatekeeperAgent.routeRequest(message);
             return ResponseEntity.ok(routeJson);
         } catch (Exception e) {
+            // 异常响应仍保持 JSON 字符串格式，浏览器和前端调试工具都能直接解析。
             return ResponseEntity.internalServerError()
                     .body("{\"error\":\"Gatekeeper 调用失败: " + escapeJson(e.getMessage()) + "\"}");
         }

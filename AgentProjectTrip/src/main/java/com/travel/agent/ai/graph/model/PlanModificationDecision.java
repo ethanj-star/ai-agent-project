@@ -47,6 +47,7 @@ public class PlanModificationDecision {
     }
 
     public void setIntent(PlanModificationIntent intent) {
+        // 模型没给出意图时使用 UNSUPPORTED，Controller 会返回更明确的用户提示。
         this.intent = intent == null ? PlanModificationIntent.UNSUPPORTED : intent;
     }
 
@@ -63,6 +64,7 @@ public class PlanModificationDecision {
     }
 
     public void setTargetSections(List<String> targetSections) {
+        // 目标模块为空表示泛化修改；保持空列表方便后续 prompt 直接拼接。
         this.targetSections = targetSections == null ? new ArrayList<>() : targetSections;
     }
 

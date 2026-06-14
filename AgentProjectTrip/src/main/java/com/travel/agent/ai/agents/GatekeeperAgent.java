@@ -143,6 +143,7 @@ public class GatekeeperAgent {
      *         调用失败时返回 DIRECT_CHAT 兜底 JSON
      */
     public String routeRequest(String userMessage) {
+        // 空输入没有可路由的信息，直接走固定兜底，避免把空消息送进模型浪费一次调用。
         if (userMessage == null || userMessage.isBlank()) {
             log.warn("[Gatekeeper] Received blank user message, defaulting to DIRECT_CHAT.");
             return FALLBACK_RESPONSE;
@@ -151,12 +152,14 @@ public class GatekeeperAgent {
         log.info("[Gatekeeper] Routing request: \"{}\"", abbreviate(userMessage, 60));
 
         try {
+            // Gatekeeper 只负责输出路由 JSON，不负责回答复杂旅行问题。
             String rawResponse = chatClient.prompt()
                     .system(GATEKEEPER_SYSTEM_PROMPT)
                     .user(userMessage)
                     .call()
                     .content();
 
+            // 即使提示词禁止 Markdown，模型仍可能包 ```json；上游只接受纯 JSON。
             String cleaned = stripMarkdownFences(rawResponse);
 
             log.info("[Gatekeeper] Route result: {}", cleaned);
@@ -185,6 +188,7 @@ public class GatekeeperAgent {
             return FALLBACK_RESPONSE;
         }
         String s = raw.strip();
+        // 兼容 ```json ... ``` 和 ``` ... ```，只去掉外层 fence，不改里面的 JSON 内容。
         if (s.startsWith("```")) {
             int newline = s.indexOf('\n');
             s = (newline != -1) ? s.substring(newline + 1).strip() : s.substring(3).strip();

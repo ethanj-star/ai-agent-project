@@ -54,14 +54,17 @@ public class AgentController {
     @GetMapping("/chat")
     public ResponseEntity<String> chat(@RequestParam String message,
                                        @RequestParam(required = false) String sessionId) {
+        // Web 层先挡住空消息，避免无意义请求继续消耗模型或工具调用资源。
         if (message == null || message.isBlank()) {
             return ResponseEntity.badRequest().body("参数 message 不能为空。");
         }
 
         try {
+            // 业务编排全部交给 MastermindAgent：Controller 只负责接 HTTP 请求和包装 HTTP 响应。
             String reply = mastermindAgent.handleUserWorkflow(message, sessionId);
             return ResponseEntity.ok(reply);
         } catch (Exception e) {
+            // 这里返回面向前端的降级说明，同时保留异常原因便于开发环境快速定位。
             return ResponseEntity.internalServerError()
                     .body("编排大脑处理异常，请稍后重试。原因：" + e.getMessage());
         }

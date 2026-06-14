@@ -47,6 +47,7 @@ public class FinalizeAnswerNode {
      * @return 写入 finalAnswer 后的状态
      */
     public TravelPlanState finish(TravelPlanState state) {
+        // Finalizer 是最后一道输出保障：即使上游传空，也要返回用户能看懂的降级答案。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setFinalAnswer("抱歉，规划流程暂时没有可用状态。请补充目的地、时间和预算后再试。");
@@ -58,6 +59,7 @@ public class FinalizeAnswerNode {
 
         PlannerDraft draft = state.getDraft();
         if (draft == null) {
+            // 没有 draft 说明 Planner 没有产出可用草案，此时不能伪造行程。
             state.setFinalAnswer("抱歉，本次没有生成可用的旅行规划草案。请补充目的地、时间和预算后再试。");
             state.setSuccess(false);
             state.setErrorMessage("PlannerDraft is null");
@@ -68,6 +70,7 @@ public class FinalizeAnswerNode {
         StringBuilder answer = new StringBuilder();
         answer.append("# ").append(defaultText(draft.getTitle(), "欧洲旅行规划草案")).append("\n\n");
 
+        // 按固定章节输出，保证测试稳定，也让前端不需要解析模型自由发挥的结构。
         appendSection(answer, "总体思路", draft.getSummary());
         appendSection(answer, "推荐行程", draft.getItineraryMarkdown());
         appendSection(answer, "预算与预订提醒", draft.getBudgetNotes());
@@ -77,6 +80,7 @@ public class FinalizeAnswerNode {
         appendAssumptions(answer, draft.getAssumptions());
         appendValidationIssues(answer, state.getValidationIssues());
 
+        // finalAnswer 是 GraphResult 最终会透传给用户的 Markdown。
         state.setFinalAnswer(answer.toString().trim());
         state.setSuccess(true);
         state.setWorkflowStatus(WorkflowStatus.COMPLETED);
@@ -96,6 +100,7 @@ public class FinalizeAnswerNode {
         RiskAssessment assessment = state.getRiskAssessment();
         answer.append("## 系统审查与修正说明\n");
         if (state.getRevisionCount() > 0) {
+            // revisionCount > 0 表示草案经过自动重写，需要让用户知道方案已被系统修过。
             answer.append("- 已完成 ").append(state.getRevisionCount()).append(" 次自动修正。\n");
         } else {
             answer.append("- 已完成输出前风险审查，未触发自动重写。\n");
@@ -110,6 +115,7 @@ public class FinalizeAnswerNode {
             if (issue == null || !hasText(issue.getMessage())) {
                 continue;
             }
+            // 只展示用户可读的风险消息和修正方向，不展示模型内部推理过程。
             answer.append("- [")
                     .append(issue.getSeverity() == null ? "INFO" : issue.getSeverity())
                     .append("] ")
@@ -146,6 +152,7 @@ public class FinalizeAnswerNode {
             return;
         }
 
+        // 把已确认事实单独列出，帮助用户快速发现系统是否理解错了目的地/时间/天数。
         answer.append("## 已确认信息\n");
         if (state.getDestinations() != null && !state.getDestinations().isEmpty()) {
             answer.append("- 目的地：").append(String.join("、", state.getDestinations())).append("\n");
@@ -195,6 +202,7 @@ public class FinalizeAnswerNode {
             return;
         }
 
+        // 非阻塞问题不会让流程暂停，但必须在最终答案中显式提示用户确认。
         answer.append("## 需要确认或注意的信息\n");
         for (ValidationIssue issue : issues) {
             if (issue == null || !hasText(issue.getMessage())) {

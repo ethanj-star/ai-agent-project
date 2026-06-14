@@ -129,6 +129,7 @@ public class TravelPlanState {
     }
 
     public void setDestinations(List<String> destinations) {
+        // 状态对象在多个节点间传递，集合统一保持非 null，节点代码就不用反复判空。
         this.destinations = destinations == null ? new ArrayList<>() : destinations;
     }
 
@@ -161,6 +162,7 @@ public class TravelPlanState {
     }
 
     public void setKeywords(List<String> keywords) {
+        // 关键词为空表示“没有额外偏好”，不应该让后续 prompt 拼接处出现空指针。
         this.keywords = keywords == null ? new ArrayList<>() : keywords;
     }
 
@@ -185,6 +187,7 @@ public class TravelPlanState {
     }
 
     public void setValidationIssues(List<ValidationIssue> validationIssues) {
+        // Validator 没发现问题时写空列表，Finalizer 和 API 响应可直接读取。
         this.validationIssues = validationIssues == null ? new ArrayList<>() : validationIssues;
     }
 
@@ -225,6 +228,7 @@ public class TravelPlanState {
     }
 
     public void setWorkflowStatus(WorkflowStatus workflowStatus) {
+        // 空状态默认回到正常规划中，避免反序列化旧状态时中断流程。
         this.workflowStatus = workflowStatus == null ? WorkflowStatus.PLANNING : workflowStatus;
     }
 
@@ -233,6 +237,7 @@ public class TravelPlanState {
     }
 
     public void setPendingQuestions(List<ClarificationQuestion> pendingQuestions) {
+        // 没有待追问问题时使用空列表，表示流程可以继续或已经完成。
         this.pendingQuestions = pendingQuestions == null ? new ArrayList<>() : pendingQuestions;
     }
 
@@ -241,6 +246,7 @@ public class TravelPlanState {
     }
 
     public void setClarificationAnswers(List<String> clarificationAnswers) {
+        // 用户尚未回答追问时为空列表，方便 MergeClarificationNode 追加当前回答。
         this.clarificationAnswers = clarificationAnswers == null ? new ArrayList<>() : clarificationAnswers;
     }
 
@@ -265,6 +271,7 @@ public class TravelPlanState {
     }
 
     public void setBranchTasks(List<BranchTask> branchTasks) {
+        // BranchDispatchNode 不需要分支时写空列表，BranchExecuteNode 会据此直接跳过。
         this.branchTasks = branchTasks == null ? new ArrayList<>() : branchTasks;
     }
 
@@ -273,6 +280,7 @@ public class TravelPlanState {
     }
 
     public void setBranchResults(List<BranchResult> branchResults) {
+        // 即使没有实时工具结果，也保持空列表，Planner 可按“无外部补充”处理。
         this.branchResults = branchResults == null ? new ArrayList<>() : branchResults;
     }
 
@@ -297,6 +305,7 @@ public class TravelPlanState {
     }
 
     public void setRevisionCount(int revisionCount) {
+        // 修正次数不能小于 0，防止外部恢复状态时传入异常值导致循环判断失效。
         this.revisionCount = Math.max(0, revisionCount);
     }
 
@@ -305,6 +314,7 @@ public class TravelPlanState {
     }
 
     public void setMaxRevisionCount(int maxRevisionCount) {
+        // 最大修正次数允许为 0，表示完全关闭自动 revision，但不能是负数。
         this.maxRevisionCount = Math.max(0, maxRevisionCount);
     }
 }

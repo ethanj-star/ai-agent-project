@@ -66,9 +66,11 @@ public class UserMemoryService {
         if (memory == null) {
             throw new IllegalArgumentException("memory must not be null");
         }
+        // 前端手动创建记忆时可以不传 ID，由服务端统一生成稳定主键。
         if (!hasText(memory.getMemoryId())) {
             memory.setMemoryId("mem-" + UUID.randomUUID());
         }
+        // 开发期没有登录态时，通过 sessionId 推导 userId，保持记忆仍能按用户隔离。
         String sessionId = userContextResolver.resolveSessionId(memory.getSessionId(), memory.getUserId());
         String userId = userContextResolver.resolveUserId(memory.getUserId(), sessionId);
         memory.setSessionId(sessionId);
@@ -93,6 +95,7 @@ public class UserMemoryService {
     public List<UserMemory> findActive(String userId, String sessionId, MemoryScope scope) {
         String resolvedUserId = userContextResolver.resolveUserId(userId, sessionId);
         if (scope == null) {
+            // scope 为空表示查询所有生效记忆，供调试台或管理页面展示。
             return userMemoryStore.findActiveByUserId(resolvedUserId);
         }
         return userMemoryStore.findActiveByUserIdAndScope(resolvedUserId, scope);
@@ -125,6 +128,7 @@ public class UserMemoryService {
         metadata.put("requirementId", spec.getRequirementId());
         List<UserMemory> candidates = new ArrayList<>();
 
+        // 从需求表抽取短期事实，作用范围限定在当前旅行任务，不升级成长期偏好。
         addListMemory(candidates, userId, sessionId, "destinations", spec.getDestinations(), metadata);
         addTextMemory(candidates, userId, sessionId, "departureCity", spec.getDepartureCity(), metadata);
         addTextMemory(candidates, userId, sessionId, "startDateText", spec.getStartDateText(), metadata);
@@ -145,6 +149,7 @@ public class UserMemoryService {
 
         List<UserMemory> existing = userMemoryStore.findActiveByUserIdAndScope(userId, MemoryScope.SHORT_TERM);
         for (UserMemory candidate : candidates) {
+            // 同一 requirement 多次确认时，不重复写入完全相同的短期记忆。
             if (!containsSameMemory(existing, candidate)) {
                 userMemoryStore.save(candidate);
             }
@@ -164,6 +169,7 @@ public class UserMemoryService {
     public String buildPromptContext(String userId, String sessionId) {
         String resolvedUserId = userContextResolver.resolveUserId(userId, sessionId);
         List<UserMemory> memories = new ArrayList<>();
+        // 长期偏好优先出现，短期事实随后补充；PlanDraftNode 会继续声明“本次需求优先级最高”。
         memories.addAll(userMemoryStore.findActiveByUserIdAndScope(resolvedUserId, MemoryScope.LONG_TERM));
         memories.addAll(userMemoryStore.findActiveByUserIdAndScope(resolvedUserId, MemoryScope.SHORT_TERM));
         if (memories.isEmpty()) {
@@ -180,6 +186,7 @@ public class UserMemoryService {
                     + memory.getKey() + " = " + memory.getValue());
             count++;
             if (count >= MAX_PROMPT_MEMORIES) {
+                // 记忆太多会挤占 Planner 上下文，超过上限的记忆留在仓库里，不进入本次 prompt。
                 break;
             }
         }
@@ -212,6 +219,7 @@ public class UserMemoryService {
                 .map(String::trim)
                 .toList();
         if (!cleaned.isEmpty()) {
+            // 多值字段合并为一条短期记忆，减少 prompt 中重复行数。
             memories.add(shortTermMemory(userId, sessionId, key, String.join("、", cleaned), metadata));
         }
     }
@@ -235,6 +243,7 @@ public class UserMemoryService {
                                               String key,
                                               String value,
                                               Map<String, Object> metadata) {
+        // 确认需求表产生的是 FACT，而不是 PREFERENCE；它只描述本次旅行已经确认的事实。
         UserMemory memory = new UserMemory();
         memory.setMemoryId("mem-" + UUID.randomUUID());
         memory.setUserId(userId);

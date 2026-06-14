@@ -69,13 +69,16 @@ public class KnowledgeBaseService {
      * @param inputFileName 文件名，例如 {@code "france_italy_entities.jsonl"}
      */
     public void ingestRealKnowledge(String inputFileName) {
+        // Controller 只传文件名，Service 在这里统一拼成 data/extracted 下的实际路径。
         String filePath = EXTRACTED_DIR + inputFileName;
         log.info("[Ingestion] Starting vector ingestion: {}", filePath);
 
+        // 三个计数器分别用于最终日志：总读取、成功灌入、被跳过。
         int totalLines   = 0;
         int ingestedDocs = 0;
         int skippedLines = 0;
 
+        // 批量提交可以减少 Embedding/向量库请求次数，也避免单次 body 过大。
         List<Document> batch = new ArrayList<>(BATCH_SIZE);
 
         try (BufferedReader reader = new BufferedReader(
@@ -90,6 +93,7 @@ public class KnowledgeBaseService {
                 totalLines++;
 
                 try {
+                    // JSONL 是一行一个 JSON 对象，逐行解析可以处理很大的文件。
                     JsonNode node = objectMapper.readTree(rawLine);
 
                     // 跳过解析后不是 JSON Object 的行（如空数组 [] 占位行）
@@ -119,6 +123,7 @@ public class KnowledgeBaseService {
                     }
 
                 } catch (Exception lineEx) {
+                    // 单行坏数据不应该让整个知识库灌入失败，所以只记录并继续下一行。
                     log.warn("[Ingestion] Failed to process line #{}: {}", totalLines, lineEx.getMessage());
                     skippedLines++;
                 }
@@ -154,6 +159,7 @@ public class KnowledgeBaseService {
      * @return 拼接好的自然语言文本，可能为空字符串（调用方负责过滤）
      */
     private static String buildContent(JsonNode node) {
+        // StringBuilder 按固定字段顺序拼接，最终文本越稳定，向量检索表现越可预期。
         StringBuilder sb = new StringBuilder();
 
         appendField(sb, "类型",     node, "type");
@@ -193,6 +199,7 @@ public class KnowledgeBaseService {
      * @return 可直接传入 {@link Document} 构造函数的 Metadata Map
      */
     private static Map<String, Object> buildMetadata(JsonNode node) {
+        // Metadata 用于过滤，不追求长文本完整性，只保留最常用的检索维度。
         Map<String, Object> meta = new HashMap<>();
         putIfPresent(meta, "type",    node, "type");
         putIfPresent(meta, "country", node, "country");
@@ -210,6 +217,7 @@ public class KnowledgeBaseService {
     private void flushBatch(List<Document> batch, int alreadyDone) {
         log.info("[Ingestion] Flushing batch of {} docs (total so far: {})...",
                 batch.size(), alreadyDone + batch.size());
+        // VectorStore.add 会在内部触发 Embedding 并写入 Pinecone。
         vectorStore.add(batch);
         log.info("[Ingestion] Batch committed to Pinecone successfully.");
     }
@@ -221,6 +229,7 @@ public class KnowledgeBaseService {
         JsonNode val = node.path(field);
         if (!val.isNull() && !val.isMissingNode()) {
             String text = val.asText("").trim();
+            // ETL 文件里有时会出现字符串 "null"，这里也当作空值处理。
             if (!text.isEmpty() && !text.equals("null")) {
                 sb.append(label).append("：").append(text).append("。");
             }
@@ -235,6 +244,7 @@ public class KnowledgeBaseService {
         JsonNode val = node.path(field);
         if (!val.isNull() && !val.isMissingNode()) {
             String text = val.asText("").trim();
+            // Pinecone metadata 不适合写入空值或字符串 "null"。
             if (!text.isEmpty() && !text.equals("null")) {
                 meta.put(key, text);
             }

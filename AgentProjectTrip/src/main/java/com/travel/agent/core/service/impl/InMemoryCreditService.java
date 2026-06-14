@@ -54,6 +54,7 @@ public class InMemoryCreditService implements CreditService {
             if (current <= 0) {
                 return false;
             }
+            // compareAndSet 保证并发请求不会把同一次剩余额度重复扣减。
             if (counter.compareAndSet(current, current - 1)) {
                 return true;
             }
@@ -67,6 +68,7 @@ public class InMemoryCreditService implements CreditService {
      */
     @Override
     public void refundGenerationCredit(String sessionId) {
+        // 生成失败后退回一次额度；如果账户还没初始化，则先创建默认账户再加回。
         credits.computeIfAbsent(normalizeSessionId(sessionId), ignored -> new AtomicInteger(DEFAULT_CREDITS))
                 .incrementAndGet();
     }

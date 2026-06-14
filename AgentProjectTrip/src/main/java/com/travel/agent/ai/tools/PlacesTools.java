@@ -53,6 +53,7 @@ public class PlacesTools {
             "入住日期和退房日期格式均为 YYYY-MM-DD。" +
             "适用于用户询问目的地住宿价格、酒店推荐等场景。")
     public List<HotelDTO> searchHotels(String city, String checkInDate, String checkOutDate) {
+        // Tools 层保持薄封装，参数校验、缓存和外部 API 异常由 PlacesService 负责。
         return placesService.searchHotels(city, checkInDate, checkOutDate);
     }
 
@@ -70,6 +71,7 @@ public class PlacesTools {
             "城市名称需使用英文（如：London, Barcelona, Prague）。" +
             "适用于用户询问目的地有哪些值得游览的景点、行程规划等场景。")
     public List<AttractionDTO> searchAttractions(String city) {
+        // 景点查询不需要日期参数；返回数量和失败兜底统一由 Service 控制。
         return placesService.searchAttractions(city);
     }
 }

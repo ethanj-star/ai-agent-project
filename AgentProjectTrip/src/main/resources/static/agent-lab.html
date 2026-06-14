@@ -428,6 +428,10 @@
         <strong id="planLabel">-</strong>
       </div>
       <div class="status-item">
+        <span>Job</span>
+        <strong id="jobLabel">-</strong>
+      </div>
+      <div class="status-item">
         <span>Version</span>
         <strong id="versionLabel">-</strong>
       </div>
@@ -607,9 +611,11 @@
       <div class="actions">
         <button id="saveBtn" class="secondary">保存需求表</button>
         <button id="confirmBtn">确认需求表</button>
-        <button id="generateBtn" class="warn">生成完整规划</button>
+        <button id="generateBtn" class="warn">异步生成完整规划</button>
+        <button id="syncGenerateBtn" class="secondary">同步调试生成</button>
       </div>
       <div id="validationBox"></div>
+      <div id="jobBox" class="message">暂无生成任务。</div>
     </div>
   </section>
 
@@ -646,10 +652,16 @@
 </main>
 
 <script>
+  // 调试台的前端“单一状态源”：所有接口响应先写入 state，再由 render* 方法刷新页面。
   const state = {
     sessionId: "test-006",
     requirementId: null,
     planId: null,
+    jobId: null,
+    jobStatus: null,
+    jobStage: null,
+    jobError: null,
+    jobTimer: null,
     currentVersion: null,
     remainingCredits: null,
     spec: null,
@@ -663,8 +675,10 @@
     loading: false
   };
 
+  // 简化 DOM 查询，下面所有事件绑定和渲染逻辑都通过 id 取元素。
   const el = (id) => document.getElementById(id);
 
+  // 表单字段集中管理，避免每个函数里重复 document.getElementById。
   const fields = {
     sessionInput: el("sessionInput"),
     naturalInput: el("naturalInput"),
@@ -691,6 +705,7 @@
   };
 
   function setLoading(value, label) {
+    // loading 会统一控制顶部进度条、按钮禁用状态和状态栏，避免用户重复点击造成并发请求。
     state.loading = value;
     el("loadingBar").classList.toggle("active", value);
     const buttons = document.querySelectorAll("button");
@@ -702,6 +717,7 @@
   }
 
   async function api(path, options = {}) {
+    // 所有后端调用都走这个包装函数：统一设置 JSON header、解析响应、记录调试 JSON。
     const response = await fetch(path, {
       headers: {
         "Content-Type": "application/json; charset=utf-8",
@@ -713,6 +729,7 @@
     const text = await response.text();
     let body = text;
     try {
+      // 后端大多数接口返回 JSON；少数旧接口可能返回纯文本，所以解析失败时保留原文本。
       body = text ? JSON.parse(text) : null;
     } catch (ignored) {
       body = text;
@@ -722,6 +739,7 @@
     renderJson(body);
 
     if (!response.ok) {
+      // 把 HTTP 错误转换成 JS Error，调用方可以用同一套 catch 分支展示错误。
       const message = extractErrorMessage(body) || `HTTP ${response.status}`;
       const error = new Error(message);
       error.body = body;
@@ -732,6 +750,7 @@
   }
 
   function extractErrorMessage(body) {
+    // 不同接口的错误字段不同，这里按“最适合给用户看”的顺序取第一个可用文本。
     if (!body) return "";
     if (typeof body === "string") return body;
     return body.assistantMessage
@@ -743,6 +762,7 @@
   }
 
   function parseCsv(value) {
+    // 表单里多个目的地/偏好用中英文逗号分隔，提交前统一转成数组。
     if (!value || !value.trim()) return [];
     return value.split(/[,，]/)
       .map((item) => item.trim())
@@ -754,6 +774,7 @@
   }
 
   function numberOrNull(value) {
+    // 空输入表示用户没有提供该字段；不要把空字符串误转成 0。
     if (value === null || value === undefined || String(value).trim() === "") {
       return null;
     }
@@ -767,12 +788,14 @@
   }
 
   function boolOrNull(value) {
+    // 下拉框的空值表示“不确定”，对应后端的 null。
     if (value === "true") return true;
     if (value === "false") return false;
     return null;
   }
 
   function fillForm(spec) {
+    // 把后端返回的结构化需求表写回表单，用于草稿抽取、保存后刷新和核心需求变更回填。
     const safe = spec || {};
     fields.destinations.value = csv(safe.destinations);
     fields.departureCity.value = safe.departureCity || "";
@@ -794,6 +817,7 @@
   }
 
   function readSpecFromForm() {
+    // 保存和确认前，从表单重新组装 TravelRequirementSpec；未编辑字段继承当前 state.spec。
     const current = state.spec || {};
     return {
       ...current,
@@ -816,6 +840,7 @@
   }
 
   function applyDraftResponse(data) {
+    // 草稿、保存、确认三个接口返回形状相近，统一在这里更新需求表状态和校验结果。
     state.requirementId = data.requirementId || data.spec?.requirementId || state.requirementId;
     state.spec = data.spec || state.spec;
     state.validation = data.validation || null;
@@ -826,6 +851,7 @@
   }
 
   async function draftRequirement() {
+    // 第一步：自然语言 -> 结构化需求表草稿，不扣费，也不进入完整规划 Graph。
     state.sessionId = fields.sessionInput.value.trim() || "test-006";
     setLoading(true, "整理需求表中...");
     try {
@@ -845,6 +871,7 @@
   }
 
   async function saveRequirement() {
+    // 保存只更新需求表草稿，不代表用户已经确认可以生成完整规划。
     if (!state.requirementId) {
       showMessage("draftMessage", "请先整理需求表。", "error");
       return;
@@ -864,6 +891,7 @@
   }
 
   async function confirmRequirement() {
+    // 确认时会再次提交当前表单，避免用户最后一次编辑还没点“保存”就直接确认。
     if (!state.requirementId) {
       showMessage("draftMessage", "请先整理需求表。", "error");
       return;
@@ -875,6 +903,7 @@
         body: JSON.stringify({ spec: readSpecFromForm() })
       });
       applyDraftResponse(data);
+      // 确认成功后后端会同步部分偏好到用户记忆，这里顺手刷新记忆列表。
       await loadMemories(false);
       showMessage("draftMessage", "需求表已确认，可以生成完整规划。", "ok");
     } catch (error) {
@@ -888,11 +917,40 @@
   }
 
   async function generatePlan() {
+    // 推荐路径：创建异步任务，然后轮询 job 状态，避免浏览器请求等待完整 Graph 执行。
     if (!state.requirementId) {
       showMessage("draftMessage", "请先整理并确认需求表。", "error");
       return;
     }
-    setLoading(true, "生成完整规划中，这一步可能需要 1-2 分钟...");
+    if (isJobActive()) {
+      // 前端也做一层重复点击保护；真正的幂等保护仍在后端 createJob。
+      showMessage("draftMessage", `已有生成任务正在运行：${state.jobId}`, "warn");
+      return;
+    }
+    setLoading(true, "创建异步生成任务中...");
+    try {
+      const data = await api(`/api/v1/requirements/${encodeURIComponent(state.requirementId)}/generate-async`, {
+        method: "POST",
+        body: "{}"
+      });
+      applyJobResponse(data);
+      showMessage("draftMessage", data.assistantMessage || `已创建生成任务：${data.jobId}`, "ok");
+      startJobPolling();
+    } catch (error) {
+      showMessage("draftMessage", error.message, "error");
+    } finally {
+      setLoading(false);
+      renderStatus();
+    }
+  }
+
+  async function generatePlanSync() {
+    // 同步生成只用于开发调试：请求会一直等到 Graph 返回，耗时较长。
+    if (!state.requirementId) {
+      showMessage("draftMessage", "请先整理并确认需求表。", "error");
+      return;
+    }
+    setLoading(true, "同步生成完整规划中，这一步可能需要 1-2 分钟...");
     try {
       const data = await api(`/api/v1/requirements/${encodeURIComponent(state.requirementId)}/generate`, {
         method: "POST",
@@ -902,6 +960,7 @@
       state.remainingCredits = data.remainingCredits;
       state.graphResult = data.graphResult || null;
       state.currentAnswer = data.graphResult?.answer || state.currentAnswer;
+      // 同步接口直接拿到 GraphResult，因此可以立即渲染最终答案。
       renderAnswer(state.currentAnswer || "生成完成，但响应中没有 answer。");
       showMessage("draftMessage", data.planId ? `生成成功，planId=${data.planId}` : "生成完成。", "ok");
       if (state.planId) {
@@ -918,7 +977,75 @@
     }
   }
 
+  function isJobActive() {
+    // 只有 PENDING/RUNNING 算运行中，SUCCEEDED/FAILED/CANCELLED 都是终态。
+    return state.jobStatus === "PENDING" || state.jobStatus === "RUNNING";
+  }
+
+  function clearJobTimer() {
+    // 切换任务或重置页面时清掉旧轮询，避免多个定时器同时打同一个接口。
+    if (state.jobTimer) {
+      clearTimeout(state.jobTimer);
+      state.jobTimer = null;
+    }
+  }
+
+  function startJobPolling() {
+    // 每次只安排下一次轮询；接口返回后再决定是否继续，便于终态立即停止。
+    clearJobTimer();
+    if (!state.jobId || !isJobActive()) {
+      return;
+    }
+    state.jobTimer = setTimeout(loadJobStatus, 2000);
+  }
+
+  async function loadJobStatus() {
+    // 轮询 jobId：成功后加载 plan，失败后展示错误和可能的降级答案。
+    if (!state.jobId) {
+      return;
+    }
+    try {
+      const data = await api(`/api/v1/jobs/${encodeURIComponent(state.jobId)}`);
+      applyJobResponse(data);
+      if (data.status === "SUCCEEDED") {
+        // 成功任务会携带 planId，随后读取计划详情拿当前版本答案。
+        showMessage("draftMessage", `生成成功，planId=${data.planId || "-"}`, "ok");
+        if (state.planId) {
+          await loadPlan(false);
+        }
+        return;
+      }
+      if (data.status === "FAILED") {
+        // 失败任务可能也带有 Graph 降级答案，尽量展示给调试者看。
+        showMessage("draftMessage", data.errorMessage || data.assistantMessage || "生成任务失败。", "error");
+        const answer = data.result?.graphResult?.answer;
+        if (answer) {
+          renderAnswer(answer);
+        }
+        return;
+      }
+      startJobPolling();
+    } catch (error) {
+      showMessage("draftMessage", error.message || "读取任务状态失败。", "error");
+      startJobPolling();
+    }
+  }
+
+  function applyJobResponse(data) {
+    // 创建任务和查询任务的响应字段相近，统一更新 state 中的任务进度。
+    if (!data) return;
+    state.jobId = data.jobId || state.jobId;
+    state.jobStatus = data.status || state.jobStatus;
+    state.jobStage = data.currentStage || state.jobStage;
+    state.jobError = data.errorMessage || null;
+    state.planId = data.planId || data.result?.planId || state.planId;
+    state.remainingCredits = data.result?.remainingCredits ?? state.remainingCredits;
+    renderJob();
+    renderStatus();
+  }
+
   async function loadMemories(showUserMessage = true) {
+    // 记忆按 sessionId/userId 查询；开发期 sessionId 临时充当用户身份。
     state.sessionId = fields.sessionInput.value.trim() || state.sessionId || "test-006";
     state.memoryScopeFilter = fields.memoryScopeFilter.value || "";
     const params = new URLSearchParams({ sessionId: state.sessionId });
@@ -943,6 +1070,7 @@
   }
 
   async function saveMemory() {
+    // 手动新增记忆用于调试长期偏好，例如住宿、交通和避开项。
     state.sessionId = fields.sessionInput.value.trim() || state.sessionId || "test-006";
     const key = fields.memoryKey.value.trim();
     const value = fields.memoryValue.value.trim();
@@ -978,6 +1106,7 @@
   }
 
   async function deactivateMemory(memoryId) {
+    // 禁用是软删除：后端保留审计记录，但 Planner 后续不会再读取这条记忆。
     if (!memoryId) return;
     setLoading(true, "禁用用户记忆中...");
     try {
@@ -996,6 +1125,7 @@
   }
 
   async function loadPlan(showErrors = true) {
+    // planId 是计划版本化修改的入口；没有 planId 时无法加载当前版本。
     if (!state.planId) {
       if (showErrors) showMessage("modifyMessage", "还没有 planId，请先生成完整规划。", "error");
       return;
@@ -1006,6 +1136,7 @@
       state.currentVersion = data.currentVersion || state.currentVersion;
       state.currentAnswer = data.currentAnswer || state.currentAnswer;
       state.spec = data.requirementSpec || state.spec;
+      // 计划详情会带需求表快照，回填表单方便继续测试核心需求变更。
       fillForm(state.spec);
       renderAnswer(state.currentAnswer || "计划存在，但当前答案为空。");
       showMessage("modifyMessage", "当前计划已刷新。", "ok");
@@ -1020,6 +1151,7 @@
   }
 
   async function loadVersion(version) {
+    // 历史版本读取只更新答案显示，不覆盖当前需求表草稿。
     if (!state.planId) {
       showMessage("modifyMessage", "还没有 planId，请先生成完整规划。", "error");
       return;
@@ -1040,6 +1172,7 @@
   }
 
   async function modifyPlan() {
+    // 修改入口只发自然语言指令，后端再判断是局部重写、核心需求变更还是追问。
     if (!state.planId) {
       showMessage("modifyMessage", "还没有 planId，请先生成完整规划。", "error");
       return;
@@ -1064,8 +1197,10 @@
   }
 
   function handleModifyResponse(data) {
+    // 后端用 status 表达修改结果，前端按状态决定刷新答案、回填需求表或展示追问。
     if (!data) return;
     if (data.status === "UPDATED") {
+      // 局部修改成功会产生新版本和新答案。
       state.currentVersion = data.version || state.currentVersion;
       state.currentAnswer = data.answer || state.currentAnswer;
       renderAnswer(state.currentAnswer);
@@ -1074,6 +1209,7 @@
     }
 
     if (data.status === "REQUIREMENT_NEEDS_CONFIRMATION" || data.status === "REQUIREMENT_NEEDS_USER_INPUT") {
+      // 核心需求改变后不直接生成新计划，而是回到需求表确认流程。
       state.spec = data.requirementSpec || state.spec;
       state.validation = data.validation || null;
       fillForm(state.spec);
@@ -1096,6 +1232,7 @@
   }
 
   function renderValidation() {
+    // 渲染校验结果：缺失字段是阻塞项，warnings 是可继续但要提醒的风险。
     const validation = state.validation;
     if (!validation) {
       el("validationBox").innerHTML = "";
@@ -1127,6 +1264,7 @@
   }
 
   function renderMemories() {
+    // 记忆列表用于观察 Planner 将来会读到哪些长期/短期偏好。
     const list = el("memoryList");
     if (!state.memories || state.memories.length === 0) {
       list.innerHTML = '<div class="message">当前没有生效记忆。</div>';
@@ -1165,11 +1303,13 @@
   }
 
   function shortId(value) {
+    // 顶部状态栏空间有限，长 UUID 只展示前缀，完整值仍保留在 title 或 JSON 面板里。
     if (!value) return "-";
     return value.length <= 14 ? value : `${value.slice(0, 10)}...`;
   }
 
   function fillMemoryExample(kind) {
+    // 示例按钮只是快速填表，不会自动保存，用户仍需点击“保存记忆”。
     fields.memoryScope.value = "LONG_TERM";
     fields.memoryType.value = "PREFERENCE";
     fields.memorySource.value = "USER_EXPLICIT";
@@ -1190,21 +1330,50 @@
   }
 
   function renderAnswer(answer) {
+    // 结果区只负责展示当前答案；planId/version 元信息单独显示在标题下方。
     el("answerBox").textContent = answer || "暂无规划结果。";
     el("resultMeta").textContent = `planId=${state.planId || "-"} · version=${state.currentVersion || "-"} · requirementId=${state.requirementId || "-"}`;
   }
 
+  function renderJob() {
+    // 根据 job status 选择 badge 颜色，让运行中、成功、失败一眼可区分。
+    const status = state.jobStatus || "NONE";
+    const badgeClass = status === "SUCCEEDED"
+      ? "ok"
+      : status === "FAILED" || status === "CANCELLED"
+        ? "error"
+        : isJobActive()
+          ? "warn"
+          : "";
+    const error = state.jobError
+      ? `<div style="margin-top:6px;color:var(--danger);">${escapeHtml(state.jobError)}</div>`
+      : "";
+    el("jobBox").innerHTML = `
+      <div>
+        <span class="badge ${badgeClass}">${escapeHtml(status)}</span>
+        <span class="badge">${escapeHtml(state.jobStage || "-")}</span>
+      </div>
+      <div style="margin-top:6px;">
+        jobId=${escapeHtml(state.jobId || "-")} · planId=${escapeHtml(state.planId || "-")}
+      </div>
+      ${error}
+    `;
+  }
+
   function renderJson(data) {
+    // 右下角 JSON 面板展示最近一次接口响应，便于对照后端 DTO。
     el("jsonBox").textContent = data === undefined
       ? "暂无响应。"
       : JSON.stringify(data, null, 2);
   }
 
   function renderStatus() {
+    // 顶部状态栏和按钮可用性都由当前 state 推导，避免界面和真实状态不同步。
     state.sessionId = fields.sessionInput.value.trim() || state.sessionId || "test-006";
     el("sessionLabel").textContent = state.sessionId || "-";
     el("requirementLabel").textContent = state.requirementId || "-";
     el("planLabel").textContent = state.planId || "-";
+    el("jobLabel").textContent = state.jobId ? shortId(state.jobId) : "-";
     el("versionLabel").textContent = state.currentVersion ? `v${state.currentVersion}` : "-";
     el("creditsLabel").textContent = state.remainingCredits ?? "-";
     el("memoryCountLabel").textContent = state.memories?.length ?? 0;
@@ -1212,7 +1381,8 @@
 
     el("saveBtn").disabled = state.loading || !state.requirementId;
     el("confirmBtn").disabled = state.loading || !state.requirementId;
-    el("generateBtn").disabled = state.loading || !state.requirementId;
+    el("generateBtn").disabled = state.loading || !state.requirementId || isJobActive();
+    el("syncGenerateBtn").disabled = state.loading || !state.requirementId || isJobActive();
     el("loadPlanBtn").disabled = state.loading || !state.planId;
     el("loadV1Btn").disabled = state.loading || !state.planId;
     el("copyAnswerBtn").disabled = state.loading || !state.currentAnswer;
@@ -1228,8 +1398,14 @@
   }
 
   function resetState() {
+    // 重置只清空当前调试流程，不删除后端已经保存的需求表、计划或记忆。
+    clearJobTimer();
     state.requirementId = null;
     state.planId = null;
+    state.jobId = null;
+    state.jobStatus = null;
+    state.jobStage = null;
+    state.jobError = null;
     state.currentVersion = null;
     state.remainingCredits = null;
     state.spec = null;
@@ -1239,6 +1415,7 @@
     state.lastRawResponse = null;
     fillForm(null);
     renderValidation();
+    renderJob();
     renderAnswer(null);
     renderJson(undefined);
     showMessage("draftMessage", "状态已清空，可以重新整理需求表。");
@@ -1248,6 +1425,7 @@
   }
 
   function escapeHtml(value) {
+    // 所有拼接进 innerHTML 的动态文本都必须转义，防止调试数据注入 HTML。
     return String(value ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -1257,6 +1435,7 @@
   }
 
   async function copyAnswer() {
+    // 复制失败通常是浏览器权限限制，不影响当前计划内容。
     if (!state.currentAnswer) return;
     try {
       await navigator.clipboard.writeText(state.currentAnswer);
@@ -1270,6 +1449,7 @@
   el("saveBtn").addEventListener("click", saveRequirement);
   el("confirmBtn").addEventListener("click", confirmRequirement);
   el("generateBtn").addEventListener("click", generatePlan);
+  el("syncGenerateBtn").addEventListener("click", generatePlanSync);
   el("loadPlanBtn").addEventListener("click", () => loadPlan(true));
   el("loadV1Btn").addEventListener("click", () => loadVersion(1));
   el("modifyBtn").addEventListener("click", modifyPlan);
@@ -1305,6 +1485,7 @@
   });
 
   fields.sessionInput.addEventListener("input", renderStatus);
+  renderJob();
   renderStatus();
   renderMemories();
   loadMemories(false);

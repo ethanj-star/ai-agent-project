@@ -42,6 +42,7 @@ public class InMemoryTravelPlanStore implements TravelPlanStore {
         if (record == null || record.getPlanId() == null || record.getPlanId().isBlank()) {
             throw new IllegalArgumentException("planId must not be blank");
         }
+        // planId 是计划主记录唯一 key；保存同一个 ID 用于覆盖当前最新版本列表。
         store.put(record.getPlanId(), record);
         return record;
     }
@@ -73,6 +74,7 @@ public class InMemoryTravelPlanStore implements TravelPlanStore {
     public Optional<TravelPlanRecord> addVersion(String planId, TravelPlanVersion version) {
         Optional<TravelPlanRecord> record = findById(planId);
         record.ifPresent(existing -> {
+            // TravelPlanRecord.addVersion 负责维护 currentVersion 和版本列表顺序。
             existing.addVersion(version);
             store.put(existing.getPlanId(), existing);
         });

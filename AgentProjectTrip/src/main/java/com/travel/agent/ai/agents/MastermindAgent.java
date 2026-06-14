@@ -125,15 +125,18 @@ public class MastermindAgent {
      * @return 最终自然语言答复
      */
     public String handleUserWorkflow(String userMessage, String sessionId) {
+        // 空消息不进入 Gatekeeper，直接返回引导语，避免路由模型处理无意义输入。
         if (userMessage == null || userMessage.isBlank()) {
             return "您好！请问有什么旅行计划我可以帮您？";
         }
 
-        // ── Step 1：Gatekeeper 意图识别 ────────────────────────────────────────
+        // Step 1：Gatekeeper 意图识别。
+        // Mastermind 不直接猜用户意图，而是先拿到结构化 route JSON。
         String routeJson = gatekeeperAgent.routeRequest(userMessage);
         log.info("[Mastermind] Gatekeeper route: {}", routeJson);
 
-        // ── Step 2：解析路由 JSON ──────────────────────────────────────────────
+        // Step 2：解析路由 JSON。
+        // 下游 switch 只处理 GatekeeperResponse；如果 JSON 不合法，说明路由层失败，需要在这里兜底。
         GatekeeperResponse route;
         try {
             route = objectMapper.readValue(routeJson, GatekeeperResponse.class);
@@ -143,12 +146,15 @@ public class MastermindAgent {
             return buildDirectChatReply();
         }
 
+        // Step 3：标准化并纠偏 intent。
+        // 模型可能输出小写或把开放式规划误判成工具请求，这里做最后一道确定性修正。
         String intent = route.getIntent() != null ? route.getIntent().toUpperCase() : "DIRECT_CHAT";
         intent = normalizeIntent(intent, userMessage);
         route.setIntent(intent);
         GatekeeperResponse.Entities entities = route.getEntities();
 
-        // ── Step 3：按意图分发 ────────────────────────────────────────────────
+        // Step 4：按意图分发。
+        // PLAN_OR_RAG 才进入复杂 Graph；单独天气/航班查询先保留在轻量工具分支。
         return switch (intent) {
             case "DIRECT_CHAT" -> buildDirectChatReply(route);
             case "TOOL_WEATHER", "TOOL_FLIGHT" -> handleToolBranch(intent, entities, userMessage);
@@ -174,6 +180,7 @@ public class MastermindAgent {
     public String chat(String userMessage) {
         String currentDate = LocalDate.now().toString();
 
+        // 旧入口保留“一个模型挂全部工具”的模式，便于兼容 TravelController 和早期手工调试。
         return chatClient.prompt()
                 .system("你是一位经验丰富、严谨高效的欧洲旅行高级规划专家（Agent），你的任务是帮用户查机票、查天气、查酒店并规划完整行程。" +
                         "你拥有以下五种工具，必须根据用户意图自主决策调用时机：" +
@@ -201,6 +208,7 @@ public class MastermindAgent {
      * 只有当 direct_reply 缺失或为空时，才返回固定引导语作为兜底。</p>
      */
     private static String buildDirectChatReply(GatekeeperResponse route) {
+        // DIRECT_CHAT 的答案由低成本 Gatekeeper 直接生成；有现成 direct_reply 时不要再调用其他模型。
         if (route != null && hasText(route.getDirectReply())) {
             return route.getDirectReply().trim();
         }
@@ -226,14 +234,17 @@ public class MastermindAgent {
     private String handleToolBranch(String intent,
                                     GatekeeperResponse.Entities entities,
                                     String userMessage) {
+        // 当前分支只区分天气和航班两类；后续接真实工具时可以在这里改成 BranchAgentFacade 调用。
         String toolType = intent.equals("TOOL_WEATHER") ? "天气" : "机票/航班";
         List<String> locations = entities != null && entities.getLocations() != null
                 ? entities.getLocations()
                 : Collections.emptyList();
+        // Gatekeeper 可能抽不出地点，先给用户一个可读占位，不让返回文案出现空数组。
         String locationStr = locations.isEmpty() ? "您提及的目的地" : String.join("、", locations);
 
         log.info("[Mastermind] Routing to TOOL branch: type={}, locations={}", toolType, locationStr);
 
+        // TODO: 当前仅返回工具分支占位文案；后续改为调用 BranchAgentFacade / WeatherTools / FlightTools 返回真实查询结果。
         return "收到您关于【" + locationStr + "】的" + toolType + "查询请求。第一阶段已优先搭好复杂行程规划直线流程，" +
                "天气和航班工具分支会在下一阶段接入。您也可以把需求描述成完整行程规划，我会进入规划流程。";
     }
@@ -257,17 +268,18 @@ public class MastermindAgent {
     private String handlePlanOrRag(GatekeeperResponse route, String userMessage, String sessionId) {
         log.info("[Mastermind] Routing to PLAN_OR_RAG linear graph workflow.");
 
-        // GraphInputRequest 是 Spring AI 外围层进入 Graph 黑箱的稳定边界协议
+        // GraphInputRequest 是 Spring AI 外围层进入 Graph 黑箱的稳定边界协议。
+        // 它同时携带原始用户输入、Gatekeeper 路由结果和 sessionId，方便 Graph 续跑 pending 状态。
         GraphInputRequest request = new GraphInputRequest(userMessage, route, sessionId);
         GraphResult result = langGraphPlannerFacade.plan(request);
 
-        // Graph 成功时直接透传最终 Markdown；Mastermind 不再二次改写复杂规划内容
+        // Graph 成功时直接透传最终 Markdown；Mastermind 不再二次改写复杂规划内容。
         if (result.isSuccess() && hasText(result.getAnswer())) {
             return result.getAnswer();
         }
 
         log.error("[Mastermind] PLAN_OR_RAG graph failed: {}", result.getErrorMessage());
-        // Graph 失败但提供了可读降级答案时，仍然优先返回该答案
+        // Graph 失败但提供了可读降级答案时，仍然优先返回该答案。
         if (hasText(result.getAnswer())) {
             return result.getAnswer();
         }

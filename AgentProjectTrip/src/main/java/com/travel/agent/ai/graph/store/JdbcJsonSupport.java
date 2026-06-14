@@ -43,6 +43,7 @@ final class JdbcJsonSupport {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (Exception e) {
+            // Store 层无法恢复序列化失败，包装成运行时异常交给上层事务/调用方兜底。
             throw new IllegalStateException("Failed to serialize JSON column", e);
         }
     }
@@ -61,6 +62,7 @@ final class JdbcJsonSupport {
         try {
             return objectMapper.readValue(json, type);
         } catch (Exception e) {
+            // 数据库 JSON 损坏属于持久化异常，不能静默吞掉，否则会产生难排查的半空对象。
             throw new IllegalStateException("Failed to deserialize JSON column", e);
         }
     }
@@ -79,6 +81,7 @@ final class JdbcJsonSupport {
         try {
             return objectMapper.readValue(json, type);
         } catch (Exception e) {
+            // 泛型 JSON 主要用于 Map/List 字段，失败时同样显式暴露为持久化异常。
             throw new IllegalStateException("Failed to deserialize JSON column", e);
         }
     }

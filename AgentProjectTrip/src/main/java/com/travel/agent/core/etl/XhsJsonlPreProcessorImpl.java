@@ -49,6 +49,7 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
 
     @Override
     public String process(String inputFilePath, String outputFilePath, String dataType) {
+        // 输出路径由调用方指定；实现内部负责兜底创建父目录，降低 Controller 使用成本。
         Path outputPath = Paths.get(outputFilePath);
 
         // ── Step 1：自动兜底创建目录 ──────────────────────────────────────────
@@ -68,11 +69,10 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
         long keptLines     = 0;  // 清洗后保留的有效行数
         long discardedLines = 0; // 被规则过滤或解析失败丢弃的行数
 
-        // #region agent debug log – hypothesis D: encoding probe
+        // 调试探针日志：用于历史排查编码和字段问题，不参与清洗业务判断。
         dbgLog("D", "process:entry", "ETL start",
                 String.format("{\"inputFile\":\"%s\",\"dataType\":\"%s\"}",
                         inputFilePath.replace("\\", "\\\\"), dataType));
-        // #endregion
 
         // ── Step 2：流式 I/O 处理 (核心抓手) ──────────────────────────────────
         // ⚡ try-with-resources 语法确保无论发生什么异常，流都能被安全关闭，防止文件句柄泄露。
@@ -91,7 +91,7 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
                 }
                 totalLines++;
 
-                // #region agent debug log – hypotheses A/B/C/E: sample first 5 lines
+                // 调试探针日志：只采样前几行 COMMENT，帮助定位爬虫字段结构是否变更。
                 if (totalLines <= 5 && "COMMENT".equalsIgnoreCase(dataType)) {
                     try {
                         JsonNode probe = objectMapper.readTree(rawLine);
@@ -115,7 +115,6 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
                                         rawLine.substring(0, Math.min(80, rawLine.length())).replace("\"", "'")));
                     }
                 }
-                // #endregion
 
                 // ── Step 3：按类型路由清洗逻辑 ────────────────────────────────────
                 try {
@@ -139,14 +138,13 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
                 } catch (Exception lineEx) {
                     // 容错兜底：当前行若是破坏性的非法 JSON，仅跳过这一行，不中断整个几十万行的批处理任务
                     log.warn("[ETL] Skipping malformed line #{}: {}", totalLines, lineEx.getMessage());
-                    // #region agent debug log – hypothesis C: exception type probe
+                    // 调试探针日志：记录前几条坏行的异常类型，便于判断是字段缺失还是 JSON 损坏。
                     if (totalLines <= 20) {
                         dbgLog("C", "process:catch#" + totalLines, "line exception",
                                 String.format("{\"exType\":\"%s\",\"msg\":\"%s\"}",
                                         lineEx.getClass().getSimpleName(),
                                         lineEx.getMessage() == null ? "null" : lineEx.getMessage().replace("\"", "'")));
                     }
-                    // #endregion
                     discardedLines++;
                 }
             }
@@ -210,7 +208,7 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
         int likeCount = parseCount(node.path("like_count").asText("0"));
         String content = node.path("content").asText("").trim();
 
-        // #region agent debug log – hypotheses A/B/E: filter decision probe
+        // 调试探针日志：记录评论过滤依据，便于确认 0 赞评论没有被误删。
         dbgLog("A_B", "processComment", "filter check",
                 String.format("{\"likeCount\":%d,\"contentLen\":%d,\"contentSnippet\":\"%s\","
                                 + "\"likeCountMissing\":%b,\"contentMissing\":%b}",
@@ -218,7 +216,6 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
                         content.substring(0, Math.min(20, content.length())).replace("\"", "'"),
                         node.path("like_count").isMissingNode(),
                         node.path("content").isMissingNode()));
-        // #endregion
 
         // likeCount 默认为 "0"，0 ≥ COMMENT_MIN_LIKES(0)，所以 0 赞评论会被保留。
         // 只有内容极度水（长度<3）或者出现脏数据异常负数赞时才丢弃。
@@ -284,7 +281,11 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
         }
     }
 
-    // #region agent debug log helper (用于 Agent 探针日志，不做业务使用)
+    /**
+     * 写入历史调试探针日志。
+     *
+     * <p>这个方法只服务 ETL 排错，不影响清洗结果；写日志失败时静默忽略，避免调试日志反过来打断批处理。</p>
+     */
     private static void dbgLog(String hypothesisId, String location, String message, String data) {
         try {
             String entry = String.format(
@@ -296,7 +297,6 @@ public class XhsJsonlPreProcessorImpl implements DataPreProcessor {
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (Exception ignored) {}
     }
-    // #endregion
 
     /**
      * ── 安全拷贝工具方法 ──────────────────────────────────────────────────

@@ -41,6 +41,7 @@ public class GraphResult {
         GraphResult result = new GraphResult();
         result.setSuccess(true);
         result.setAnswer(answer);
+        // 校验问题即使为空也会转成空列表，上层可以直接遍历展示。
         result.setValidationIssues(validationIssues);
         return result;
     }
@@ -83,6 +84,7 @@ public class GraphResult {
     }
 
     public void setValidationIssues(List<ValidationIssue> validationIssues) {
+        // GraphResult 是对外协议，列表字段保持非 null，降低 Controller 和前端处理复杂度。
         this.validationIssues = validationIssues == null ? new ArrayList<>() : validationIssues;
     }
 

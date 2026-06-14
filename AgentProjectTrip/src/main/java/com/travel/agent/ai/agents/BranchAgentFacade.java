@@ -158,11 +158,14 @@ public class BranchAgentFacade {
      * @return 分支执行结果；失败时包含降级摘要和错误信息
      */
     public BranchResult execute(BranchTask task) {
+        // 分支任务是 Graph 派发出来的，如果连类型都没有，就没有办法判断该调用哪个工具。
+        // 这里返回失败结果而不是抛异常，是为了让 Planner 仍能继续生成“缺少实时数据”的保守方案。
         if (task == null || task.getType() == null) {
             return BranchResult.failure(task, "分支任务为空或缺少类型，已跳过。", "BranchTask is null or type is null");
         }
 
         try {
+            // BranchTaskType 是分支执行的唯一机器可读路由依据，避免依赖自然语言摘要猜测工具类型。
             return switch (task.getType()) {
                 case WEATHER -> executeWeather(task);
                 case PLACES -> executePlaces(task);
@@ -170,6 +173,7 @@ public class BranchAgentFacade {
                 case FLIGHT -> executeFlightFallback(task);
             };
         } catch (Exception e) {
+            // 单个工具失败不应该打断完整行程规划；失败会被包装成 BranchResult 交给 Planner 显式说明风险。
             log.warn("[BranchAgent] task failed: type={}, error={}", task.getType(), e.getMessage());
             return BranchResult.failure(task,
                     task.getType() + " 分支暂时不可用，Planner 不应伪造该类实时数据。",
@@ -181,6 +185,7 @@ public class BranchAgentFacade {
      * 执行天气分支。
      */
     private BranchResult executeWeather(BranchTask task) {
+        // WeatherTools 接收英文城市名；先把中文国家/城市规整成代表城市，避免外部 API 参数不可识别。
         List<String> targets = resolveToolCities(task);
         if (targets.isEmpty()) {
             return BranchResult.failure(task,
@@ -194,6 +199,7 @@ public class BranchAgentFacade {
 
         for (String target : targets) {
             WeatherDTO weather = weatherTools.getWeather(target);
+            // WeatherService 自己会返回兜底 DTO。这里要识别这种兜底结果，避免 Planner 误当真实天气使用。
             if (weather == null || WEATHER_FAILURE_DESCRIPTION.equals(weather.description())) {
                 failures.add(target);
                 continue;
@@ -204,6 +210,7 @@ public class BranchAgentFacade {
         }
 
         if (summaries.isEmpty()) {
+            // 所有城市都失败时，不向上抛异常；让最终答案提示“只能参考季节性建议”更稳妥。
             return BranchResult.failure(task,
                     "天气分支未获得可用实时天气，Planner 只能给季节性天气建议。",
                     "weather unavailable for " + String.join(", ", targets));
@@ -220,6 +227,7 @@ public class BranchAgentFacade {
      * 执行景点分支。
      */
     private BranchResult executePlaces(BranchTask task) {
+        // 景点工具同样依赖英文城市名；无法解析城市时直接降级，避免调用外部服务产生噪声。
         List<String> targets = resolveToolCities(task);
         if (targets.isEmpty()) {
             return BranchResult.failure(task,
@@ -231,6 +239,7 @@ public class BranchAgentFacade {
         List<String> rawData = new ArrayList<>();
         for (String target : targets) {
             List<AttractionDTO> attractions = placesTools.searchAttractions(target);
+            // 单个城市查不到景点不代表整个分支失败，继续尝试其他代表城市。
             if (attractions == null || attractions.isEmpty()) {
                 continue;
             }
@@ -252,6 +261,7 @@ public class BranchAgentFacade {
      * 执行知识库分支。
      */
     private BranchResult executeKnowledge(BranchTask task) {
+        // 知识库检索优先使用原始用户问题；没有原问题时才退回第一个目的地。
         String query = hasText(task.getQuery()) ? task.getQuery() : firstDestinationOrQuery(task);
         if (!hasText(query)) {
             return BranchResult.failure(task, "知识分支缺少查询文本，已跳过。", "missing query");
@@ -268,6 +278,7 @@ public class BranchAgentFacade {
      * 航班分支第一版降级处理。
      */
     private static BranchResult executeFlightFallback(BranchTask task) {
+        // 航班查询需要机场代码、日期窗口和供应商能力；当前阶段宁可明确不可用，也不伪造票价。
         return BranchResult.failure(task,
                 "航班分支第一版暂未启用真实查询；Planner 不应生成具体航班号、实时票价或可售状态。",
                 "flight branch is not enabled in phase 3 slice 1");
@@ -295,12 +306,14 @@ public class BranchAgentFacade {
                     cities.add(city);
                 }
                 if (cities.size() >= MAX_TOOL_CITY_QUERIES) {
+                    // 多国行程只取前几个代表城市，控制外部 API 调用次数和响应时间。
                     break;
                 }
             }
         }
 
         if (cities.isEmpty()) {
+            // 有些任务没有结构化目的地，但原始 query 里可能包含“巴黎天气”这类可识别文本。
             String city = normalizeToolCity(task == null ? null : task.getQuery());
             if (hasText(city)) {
                 cities.add(city);
@@ -321,19 +334,27 @@ public class BranchAgentFacade {
         }
         String trimmed = value.trim();
         String normalized = trimmed.toLowerCase(Locale.ROOT);
+
+        // 第一层：精确匹配英文小写 key，例如 france -> Paris。
         String exact = TOOL_CITY_ALIASES.get(normalized);
         if (hasText(exact)) {
             return exact;
         }
+
+        // 第二层：精确匹配原文 key，例如 “法国” -> Paris。
         String exactOriginal = TOOL_CITY_ALIASES.get(trimmed);
         if (hasText(exactOriginal)) {
             return exactOriginal;
         }
+
+        // 第三层：包含匹配，处理“法国巴黎”“瑞士苏黎世附近”这类混合短语。
         for (Map.Entry<String, String> entry : TOOL_CITY_ALIASES.entrySet()) {
             if (normalized.contains(entry.getKey().toLowerCase(Locale.ROOT))) {
                 return entry.getValue();
             }
         }
+
+        // 未收录中文地点无法保证外部工具能识别；英文输入则假定用户已经给了可查询城市名。
         return isAscii(trimmed) ? trimmed : null;
     }
 

@@ -13,7 +13,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * RequirementValidationNode 的单元测试。
  *
- * <p>重点验证第五阶段生成门控规则：目的地、时长、预算、币种和国际机票边界必须在生成前确认。</p>
+ * <p>重点验证生成门控规则：目的地、时长、预算和币种是硬阻塞；
+ * 国际机票边界、出发地和时间精度只作为 warning 提醒用户确认。</p>
  */
 class RequirementValidationNodeTest {
 
@@ -50,17 +51,19 @@ class RequirementValidationNodeTest {
     }
 
     /**
-     * 预算是否包含国际机票不明确时，应阻塞生成，避免后续预算误算。
+     * 预算是否包含国际机票不明确时，只提示风险，不阻塞确认。
      */
     @Test
-    void validateBlocksUnknownInternationalFlightBoundary() {
+    void validateWarnsUnknownInternationalFlightBoundary() {
         TravelRequirementSpec spec = completeSpec();
         spec.setBudgetIncludesInternationalFlight(null);
 
         RequirementValidation validation = node.validate(spec);
 
-        assertThat(validation.isReadyToConfirm()).isFalse();
+        assertThat(validation.isReadyToConfirm()).isTrue();
         assertThat(validation.getMissingFields()).contains("budgetIncludesInternationalFlight");
+        assertThat(validation.getWarnings()).anyMatch(warning -> warning.contains("国际机票"));
+        assertThat(validation.getBlockingReasons()).isEmpty();
     }
 
     /**

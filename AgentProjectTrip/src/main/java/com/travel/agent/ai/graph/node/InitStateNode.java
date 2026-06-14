@@ -58,17 +58,20 @@ public class InitStateNode {
         state.setLastUserMessage(request.getUserQuery());
         state.setRoute(request.getRoute());
 
+        // 第五阶段以后，结构化需求表比 Gatekeeper 实体更可靠；有 spec 时优先按强类型字段初始化。
         if (request.getRequirementSpec() != null) {
             initFromRequirementSpec(state, request.getRequirementSpec());
             return state;
         }
 
+        // 旧入口仍依赖 Gatekeeper entities；这里兼容没有结构化需求表的 PLAN_OR_RAG 请求。
         GatekeeperResponse.Entities entities = request.getRoute() == null
                 ? null
                 : request.getRoute().getEntities();
 
         List<String> keywords = safeList(entities == null ? null : entities.getKeywords());
         String rawTravelTime = entities == null ? null : entities.getTime();
+        // 独立解析 duration，避免 “10天” 被当成出发日期写入 travelTime。
         DurationParser.DurationResult duration =
                 DurationParser.extract(request.getUserQuery(), rawTravelTime, keywords);
 
@@ -96,6 +99,7 @@ public class InitStateNode {
      * </p>
      */
     private static void initFromRequirementSpec(TravelPlanState state, TravelRequirementSpec spec) {
+        // requirementSpec 保留完整强类型事实，后续 Planner/RiskReasoning 应优先读取它。
         state.setRequirementSpec(spec);
         state.setDestinations(safeList(spec.getDestinations()));
         state.setTravelTime(resolveRequirementTravelTime(spec));
@@ -122,6 +126,7 @@ public class InitStateNode {
         if (spec == null) {
             return keywords;
         }
+        // 把强类型需求同步成 keywords，是为了兼容仍依赖 keywords 的分支派发和部分校验规则。
         if (spec.getBudgetAmount() != null) {
             keywords.add("预算" + spec.getBudgetAmount().stripTrailingZeros().toPlainString()
                     + defaultText(spec.getBudgetCurrency(), ""));
@@ -145,6 +150,9 @@ public class InitStateNode {
         }
         if (hasText(spec.getTransportPreference())) {
             keywords.add(spec.getTransportPreference().trim());
+        }
+        if (hasText(spec.getSpecialNotes())) {
+            keywords.add(spec.getSpecialNotes().trim());
         }
         return keywords;
     }

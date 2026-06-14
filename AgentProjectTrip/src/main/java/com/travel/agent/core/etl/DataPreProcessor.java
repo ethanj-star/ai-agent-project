@@ -1,9 +1,17 @@
 package com.travel.agent.core.etl;
 
 /**
- * ── 数据预处理策略顶层接口 ───────────────────────────────────────
- * 所有数据预处理（ETL 清洗）策略的顶层契约。
- * 采用了策略模式（Strategy Pattern）的设计思想，每个具体的实现类都将针对特定的平台或特定的数据结构进行定制化处理。
+ * 数据预处理策略顶层接口（Core 层 - ETL 清洗契约）。
+ *
+ * <p>系统架构位置：EtlController / 后台任务 -> <b>DataPreProcessor</b> -> 具体平台清洗实现</p>
+ *
+ * <p>职责：
+ * <ul>
+ *   <li>定义 JSONL 原始数据清洗的统一入口。</li>
+ *   <li>允许不同平台或不同数据结构实现自己的过滤、字段瘦身和格式规范化规则。</li>
+ *   <li>让 Web / Job 层只依赖接口，不需要知道小红书、评论、主帖等具体清洗细节。</li>
+ * </ul>
+ * </p>
  */
 public interface DataPreProcessor {
 

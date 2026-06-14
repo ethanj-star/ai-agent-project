@@ -67,6 +67,7 @@ public class JdbcUserMemoryStore implements UserMemoryStore {
         if (!hasText(memory.getUserId())) {
             throw new IllegalArgumentException("userId must not be blank");
         }
+        // 记忆可能被用户编辑或同步更新，使用 upsert 保持 memoryId 稳定。
         jdbcTemplate.update("""
                         INSERT INTO user_memories
                           (memory_id, user_id, session_id, scope, type, memory_key, memory_value,
@@ -117,6 +118,7 @@ public class JdbcUserMemoryStore implements UserMemoryStore {
                     memoryId);
             return Optional.ofNullable(memory);
         } catch (EmptyResultDataAccessException e) {
+            // 查询不到记忆是正常分支，Controller/Service 用 Optional 决定是否返回 404 或忽略。
             return Optional.empty();
         }
     }
@@ -171,6 +173,7 @@ public class JdbcUserMemoryStore implements UserMemoryStore {
     @Override
     public void deactivate(String memoryId) {
         if (hasText(memoryId)) {
+            // 软删除保留历史记录，后续可以审计某条偏好为什么不再进入 Planner prompt。
             jdbcTemplate.update("""
                             UPDATE user_memories
                             SET active = FALSE,
@@ -182,6 +185,7 @@ public class JdbcUserMemoryStore implements UserMemoryStore {
     }
 
     private UserMemory mapMemory(ResultSet rs) throws java.sql.SQLException {
+        // 数据库行到领域对象的唯一映射点，保持 MemoryController 和 Service 不关心表结构。
         UserMemory memory = new UserMemory();
         memory.setMemoryId(rs.getString("memory_id"));
         memory.setUserId(rs.getString("user_id"));
@@ -197,6 +201,7 @@ public class JdbcUserMemoryStore implements UserMemoryStore {
                 rs.getString("metadata_json"),
                 new TypeReference<Map<String, Object>>() {
                 });
+        // metadata 允许为空；UserMemory setter 会将 null 规整为空 Map。
         memory.setMetadata(metadata);
         memory.setCreatedAt(toInstant(rs.getTimestamp("created_at")));
         memory.setUpdatedAt(toInstant(rs.getTimestamp("updated_at")));
@@ -204,6 +209,7 @@ public class JdbcUserMemoryStore implements UserMemoryStore {
     }
 
     private static Instant toInstant(Timestamp timestamp) {
+        // created_at / updated_at 理论上由数据库填充；为空时用 now 避免响应 DTO 出现 null 时间。
         return timestamp == null ? Instant.now() : timestamp.toInstant();
     }
 

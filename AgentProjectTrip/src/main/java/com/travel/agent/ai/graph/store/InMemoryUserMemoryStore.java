@@ -49,6 +49,7 @@ public class InMemoryUserMemoryStore implements UserMemoryStore {
         if (!hasText(memory.getUserId())) {
             throw new IllegalArgumentException("userId must not be blank");
         }
+        // 每次保存都刷新 updatedAt，和 JDBC 实现的更新时间语义保持一致。
         memory.setUpdatedAt(Instant.now());
         store.put(memory.getMemoryId(), memory);
         return memory;
@@ -82,6 +83,7 @@ public class InMemoryUserMemoryStore implements UserMemoryStore {
         return store.values().stream()
                 .filter(memory -> memory != null && memory.isActive())
                 .filter(memory -> userId.equals(memory.getUserId()))
+                // 按创建时间升序，构造 prompt 时能保持用户偏好出现的自然顺序。
                 .sorted(Comparator.comparing(UserMemory::getCreatedAt))
                 .toList();
     }
@@ -115,6 +117,7 @@ public class InMemoryUserMemoryStore implements UserMemoryStore {
     @Override
     public void deactivate(String memoryId) {
         findById(memoryId).ifPresent(memory -> {
+            // 记忆采用软删除，方便后续审计“这个偏好为什么不再生效”。
             memory.setActive(false);
             memory.setUpdatedAt(Instant.now());
         });

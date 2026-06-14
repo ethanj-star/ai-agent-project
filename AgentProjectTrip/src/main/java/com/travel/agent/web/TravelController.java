@@ -54,6 +54,7 @@ public class TravelController {
      */
     @GetMapping("/health")
     public String health() {
+        // 健康探针只证明 Spring 应用进程可响应，不触发数据库、模型或外部 API。
         return "ok";
     }
 
@@ -75,6 +76,7 @@ public class TravelController {
             @RequestParam(defaultValue = "DUB") String origin,
             @RequestParam(defaultValue = "CDG") String destination,
             @RequestParam(defaultValue = "2024-12-01") String date) {
+        // 这是原始数据接口：直接查 Service，便于绕过 Agent 验证航班数据源本身。
         return flightService.searchFlights(origin, destination, date);
     }
 
@@ -93,6 +95,7 @@ public class TravelController {
      */
     @GetMapping("/chat")
     public String chat(@RequestParam String message) {
+        // 兼容旧入口：这里走 MastermindAgent.chat 的单模型工具调用模式。
         return mastermindAgent.chat(message);
     }
 }

@@ -177,6 +177,7 @@ public class RequirementPatch {
     }
 
     private static List<String> cleanList(List<String> values) {
+        // 补丁列表常来自模型输出，清洗后再合并，避免空字符串污染需求表偏好。
         List<String> cleaned = new ArrayList<>();
         if (values == null || values.isEmpty()) {
             return cleaned;

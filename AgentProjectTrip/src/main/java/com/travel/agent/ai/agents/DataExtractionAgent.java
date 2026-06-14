@@ -88,10 +88,12 @@ public class DataExtractionAgent {
      * @param outputFileName {@code data/extracted/} 下要创建的纯文件名
      */
     public void runExtractionTask(String inputFileName, String outputFileName) {
+        // Controller 只传文件名；这里统一拼成 ETL 约定目录，避免 Web 层知道本地文件结构。
         String inputPath  = PROCESSED_DIR + inputFileName;
         String outputPath = EXTRACTED_DIR + outputFileName;
 
         try {
+            // 输出目录可能是首次运行才创建。目录创建失败时直接结束，避免后面写文件再抛更难懂的异常。
             Files.createDirectories(Paths.get(EXTRACTED_DIR));
         } catch (IOException e) {
             log.error("[Extraction] Cannot create output directory [{}]: {}", EXTRACTED_DIR, e.getMessage());
@@ -112,6 +114,7 @@ public class DataExtractionAgent {
 
             while ((rawLine = reader.readLine()) != null) {
                 rawLine = rawLine.trim();
+                // 清洗阶段可能留下空行；空行不是一条有效 JSONL 记录，直接跳过。
                 if (rawLine.isEmpty()) {
                     continue;
                 }
@@ -119,16 +122,19 @@ public class DataExtractionAgent {
                 batch.add(rawLine);
 
                 if (batch.size() == BATCH_SIZE) {
+                    // BATCH_SIZE 当前为 1，等于逐条调用模型；这样慢一些，但对抽取准确率和定位坏数据更友好。
                     processBatch(batch, writer, ++totalBatches);
                     batch.clear();
                 }
             }
 
             if (!batch.isEmpty()) {
+                // 文件末尾不足一个批次时，也要把剩余记录送给模型处理。
                 processBatch(batch, writer, ++totalBatches);
             }
 
         } catch (IOException e) {
+            // 输入文件不存在、读取失败、写入失败都属于任务级 I/O 错误，当前批处理无法继续。
             log.error("[Extraction] Fatal I/O error during extraction task", e);
             return;
         }
@@ -141,10 +147,6 @@ public class DataExtractionAgent {
     // 私有辅助方法
     // -------------------------------------------------------------------------
 
-    /**
-     * 将一个批次发送给 LLM，清理响应，并追加写入 writer。
-     * 异常按批次捕获，单批失败不中止整个任务。
-     */
     /**
      * 将一个批次发送给 LLM，解析响应为 JSONL 格式后逐行落盘。
      *
@@ -168,14 +170,13 @@ public class DataExtractionAgent {
      */
     private void processBatch(List<String> batch, BufferedWriter writer, int batchNumber) {
         try {
-            // ── Step 1：打包入参 ──────────────────────────────────────────────────
             // 将 List<String>（每个元素是一行 JSONL 文本）序列化为 JSON Array 字符串，
             // 例如：["{"note_id":"abc","title":"..."}"] ，作为 user message 送给大模型
             String batchJson = objectMapper.writeValueAsString(batch);
 
             log.info("[Extraction] Calling LLM for batch #{} ({} records)...", batchNumber, batch.size());
 
-            // ── Step 2：调用大模型 ────────────────────────────────────────────────
+            // Step 1：调用大模型执行结构化抽取。
             String rawResponse = chatClient.prompt()
                     .system(EXTRACT_SYSTEM_PROMPT)
                     .user(batchJson)
@@ -188,12 +189,12 @@ public class DataExtractionAgent {
                     .call()
                     .content();
 
-            // ── Step 3：清理 Markdown 代码块标记 ─────────────────────────────────
+            // Step 2：清理 Markdown 代码块标记。
             // 大模型经常无视"禁止 Markdown"指令，在 JSON 外面包裹 ```json ... ```
             // stripMarkdownFences 负责剥离这层包装，确保 cleaned 是纯净的 JSON 字符串
             String cleaned = stripMarkdownFences(rawResponse);
 
-            // ── Step 4：强解析 + 扁平化写入 (JSON Array → JSONL) ─────────────────
+            // Step 3：强解析 + 扁平化写入（JSON Array -> JSONL）。
             // 问题根源：大模型返回的是 "[{...}, {...}]" 这样的 JSON Array。
             // 如果直接 writer.write(cleaned)，文件里会出现 "[...] [...]" 的非法拼接格式。
             // 正确做法：将 Array 解析为节点树，提取每个子节点，逐行写入，生成标准 JSONL。
@@ -201,7 +202,7 @@ public class DataExtractionAgent {
                 JsonNode rootNode = objectMapper.readTree(cleaned);
 
                 if (rootNode.isArray()) {
-                    // ✅ 正常路径：大模型按要求返回了 Array，逐个元素扁平化写入
+                    // 正常路径：大模型按要求返回了 Array，逐个元素扁平化写入。
                     int writtenCount = 0;
                     for (JsonNode entityNode : rootNode) {
                         // 将每个 JSON Object 节点序列化为单行字符串，不含换行
@@ -209,13 +210,13 @@ public class DataExtractionAgent {
                         writer.write(line);
                         // 每条记录独占一行，符合 JSONL 规范
                         writer.newLine();
-                        // ⚡ 强制刷盘：每写一行就 flush，保证即使程序中途崩溃，已处理的数据也在硬盘上
+                        // 每写一行就 flush，保证即使程序中途崩溃，已处理的数据也在硬盘上。
                         writer.flush();
                         writtenCount++;
                     }
                     log.info("[Extraction] Batch #{} → {} entities written to JSONL.", batchNumber, writtenCount);
                 } else {
-                    // ⚠️ 降级路径：大模型返回的不是 Array（可能是单个 Object 或纯文本说明）
+                    // 降级路径：大模型返回的不是 Array（可能是单个 Object 或纯文本说明）。
                     // 安全兜底：将整个响应作为一行原样写入，不丢数据，方便人工 review
                     log.warn("[Extraction] Batch #{} response is not a JSON Array (type={}), writing raw line.",
                             batchNumber, rootNode.getNodeType());

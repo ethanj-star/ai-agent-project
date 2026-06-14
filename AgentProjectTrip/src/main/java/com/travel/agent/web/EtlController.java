@@ -105,6 +105,7 @@ public class EtlController {
             @RequestParam String inputFileName,
             @RequestParam(defaultValue = "extracted_entities.jsonl") String outputFileName) {
 
+        // 提取任务必须知道输入文件名，否则后台线程启动后也找不到数据源。
         if (inputFileName == null || inputFileName.isBlank()) {
             return ResponseEntity.badRequest().body("ERROR: 'inputFileName' must not be empty.");
         }

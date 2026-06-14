@@ -38,6 +38,7 @@ public class BranchDispatchNode {
      * @return 写入 branchTasks 后的状态
      */
     public TravelPlanState dispatch(TravelPlanState state) {
+        // Facade 正常不会传 null；这里是节点级防御，保证单测或异常路径也能返回可继续流转的状态。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setBranchTasks(new ArrayList<>());
@@ -45,15 +46,19 @@ public class BranchDispatchNode {
         }
 
         List<BranchTask> tasks = new ArrayList<>();
+        // 有目的地时默认补一条知识库任务，为 Planner 提供防坑、交通和经验类上下文。
         if (hasDestinations(state)) {
             tasks.add(buildTask("knowledge-1", BranchTaskType.KNOWLEDGE, state));
         }
+        // 只有明确问“当前/今天/实时天气”才派天气任务，避免把今天的天气误用于未来行程。
         if (hasDestinations(state) && hasRealtimeWeatherNeed(state)) {
             tasks.add(buildTask("weather-1", BranchTaskType.WEATHER, state));
         }
+        // 行程、景点、小众、人流等语义会触发景点分支，用来给 Planner 增加 POI 线索。
         if (hasDestinations(state) && looksLikePlacesNeed(state)) {
             tasks.add(buildTask("places-1", BranchTaskType.PLACES, state));
         }
+        // 航班任务只在正向查询时触发，“不含机票”这类预算边界会在 hasExplicitFlightNeed 中排除。
         if (hasExplicitFlightNeed(state)) {
             tasks.add(buildTask("flight-1", BranchTaskType.FLIGHT, state));
         }
@@ -66,6 +71,7 @@ public class BranchDispatchNode {
     }
 
     private static BranchTask buildTask(String taskId, BranchTaskType type, TravelPlanState state) {
+        // BranchTask 是 Graph 与分支 Agent 之间的稳定协议，只传分支执行需要的最小上下文。
         return new BranchTask(
                 taskId,
                 type,
@@ -80,6 +86,7 @@ public class BranchDispatchNode {
     }
 
     private static boolean looksLikePlacesNeed(TravelPlanState state) {
+        // 规则只负责低成本粗判；真正的景点质量由 PlacesTools / Planner 后续处理。
         String text = joinedText(state);
         return text.contains("景点")
                 || text.contains("地方")
@@ -100,6 +107,7 @@ public class BranchDispatchNode {
      * “国庆”“下个月”“10月”这类未来旅行时间不应触发实时天气分支，否则 Planner 可能把今天的天气误当作出行当天依据。</p>
      */
     private static boolean hasRealtimeWeatherNeed(TravelPlanState state) {
+        // 同时看用户原文和 travelTime，因为 Gatekeeper 可能把“今天”抽到 time 字段里。
         String text = joinedText(state).toLowerCase(Locale.ROOT);
         String travelTime = state == null ? "" : defaultText(state.getTravelTime(), "").toLowerCase(Locale.ROOT);
         return containsAny(text,
@@ -128,6 +136,7 @@ public class BranchDispatchNode {
      */
     private static boolean hasExplicitFlightNeed(TravelPlanState state) {
         String text = joinedText(state).toLowerCase(Locale.ROOT);
+        // 先处理否定语义，再判断正向关键词，避免“预算不含机票”误触发航班查询。
         if (containsAny(text,
                 "不含机票",
                 "不含国际机票",
@@ -164,6 +173,7 @@ public class BranchDispatchNode {
 
     private static String joinedText(TravelPlanState state) {
         StringBuilder builder = new StringBuilder();
+        // 用户原文保留最多语义，keywords 则补充 Gatekeeper 抽出的短标签。
         if (hasText(state.getUserQuery())) {
             builder.append(state.getUserQuery()).append(' ');
         }

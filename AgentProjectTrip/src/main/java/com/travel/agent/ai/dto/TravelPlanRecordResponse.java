@@ -34,6 +34,7 @@ public class TravelPlanRecordResponse {
     private TravelRequirementSpec requirementSpec;
 
     public static TravelPlanRecordResponse from(TravelPlanRecord record) {
+        // Controller 使用这个方法把带历史版本列表的内部记录，整理成“当前计划概览”。
         TravelPlanRecordResponse response = new TravelPlanRecordResponse();
         if (record == null) {
             return response;
@@ -42,6 +43,7 @@ public class TravelPlanRecordResponse {
         response.setRequirementId(record.getRequirementId());
         response.setCurrentVersion(record.getCurrentVersion());
         response.setRequirementSpec(record.getRequirementSpec());
+        // currentAnswer 只取当前版本的 finalAnswer，历史版本由单独的版本接口查询。
         response.setCurrentAnswer(record.current()
                 .map(TravelPlanVersion::getFinalAnswer)
                 .orElse(null));

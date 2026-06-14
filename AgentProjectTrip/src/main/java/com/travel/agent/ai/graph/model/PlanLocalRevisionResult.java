@@ -27,6 +27,7 @@ public class PlanLocalRevisionResult {
     private String errorMessage;
 
     public static PlanLocalRevisionResult success(String answer, String modificationSummary) {
+        // 成功结果一定带新答案，PlanController 会用它创建一个新的计划版本。
         PlanLocalRevisionResult result = new PlanLocalRevisionResult();
         result.setSuccess(true);
         result.setAnswer(answer);
@@ -35,6 +36,7 @@ public class PlanLocalRevisionResult {
     }
 
     public static PlanLocalRevisionResult failure(String errorMessage) {
+        // 失败结果只携带错误，不返回半成品答案，旧版本会继续保留。
         PlanLocalRevisionResult result = new PlanLocalRevisionResult();
         result.setSuccess(false);
         result.setErrorMessage(errorMessage);

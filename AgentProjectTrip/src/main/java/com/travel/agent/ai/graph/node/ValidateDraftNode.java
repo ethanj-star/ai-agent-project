@@ -47,6 +47,7 @@ public class ValidateDraftNode {
      * @return 写入 validationIssues 后的状态
      */
     public TravelPlanState validate(TravelPlanState state) {
+        // 校验节点也做 null-safe，避免上游失败时继续抛空指针。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setValidationIssues(List.of(
@@ -76,9 +77,11 @@ public class ValidateDraftNode {
         }
 
         if (draft == null) {
+            // 没有草案是高风险，Finalizer 无法正常拼装最终答案。
             issues.add(ValidationIssue.high("EMPTY_DRAFT", "规划草案为空，无法形成可靠行程。"));
         } else {
             if (mentionsBudget(state.getUserQuery()) && !hasText(draft.getBudgetNotes())) {
+                // 用户明确提预算时，预算说明就不是可选项。
                 issues.add(ValidationIssue.high("BUDGET_NOT_ADDRESSED", "用户提到了预算，但草案没有预算说明。"));
             }
 
@@ -91,10 +94,12 @@ public class ValidateDraftNode {
 
         if (!hasText(state.getRagContext()) || state.getRagContext().contains("暂无相关攻略")
                 || state.getRagContext().contains("暂时不可用")) {
+            // RAG 不足不阻塞流程，但最终答案需要提醒“本地经验可能不足”。
             issues.add(ValidationIssue.low("INSUFFICIENT_RAG", "私有知识库上下文不足，本次方案可能缺少本地经验。"));
         }
 
         state.setValidationIssues(issues);
+        // 目前只有目的地缺失/过宽会阻塞并追问，其余问题交给 Finalizer 或 RiskReasoning 提示/修正。
         state.setWorkflowStatus(hasBlockingClarificationIssue(issues)
                 ? WorkflowStatus.NEEDS_CLARIFICATION
                 : WorkflowStatus.PLANNING);

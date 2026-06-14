@@ -106,18 +106,22 @@ public class TripRiskReasoningNode {
      * @return 写入 riskAssessment 后的状态
      */
     public TravelPlanState assess(TravelPlanState state) {
+        // 输出前审查不能因为空状态再次失败；空状态返回 clear assessment，让 Facade 继续兜底。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setRiskAssessment(RiskAssessment.clear());
             return fallback;
         }
 
+        // Step 1：先跑确定性规则。规则结果稳定、可测试，是风险审查的保底层。
         RiskAssessment ruleAssessment = assessByRules(state);
         RiskAssessment modelAssessment = RiskAssessment.clear();
         if (coreChatClient != null && state.getDraft() != null) {
+            // Step 2：有草案且模型可用时，再用核心模型补充语义风险判断。
             modelAssessment = assessByModelOrClear(state);
         }
 
+        // Step 3：合并规则和模型结果，并重新推导 needsRevision / needsClarification。
         RiskAssessment merged = mergeAssessments(ruleAssessment, modelAssessment);
         state.setRiskAssessment(merged);
         log.info("[Graph][RiskReasoning] issues={}, needsRevision={}, needsClarification={}",
@@ -139,16 +143,18 @@ public class TripRiskReasoningNode {
     RiskAssessment assessByRules(TravelPlanState state) {
         List<RiskIssue> issues = new ArrayList<>();
         PlannerDraft draft = state.getDraft();
+        // 多个规则都需要扫草案全文，先合并一次，避免各规则重复拼接。
         String fullDraftText = fullDraftText(draft);
         String userText = defaultText(state.getUserQuery(), "") + " "
                 + String.join(" ", state.getKeywords() == null ? List.of() : state.getKeywords());
 
-        addDurationMismatchIssue(state, fullDraftText, issues);
-        addDestinationMismatchIssues(state, fullDraftText, issues);
-        addCrowdConflictIssue(userText, fullDraftText, issues);
-        addFlightBudgetConflictIssue(userText, draft, issues);
-        addToolUnavailableIssues(state.getBranchResults(), fullDraftText, issues);
-        addValidationWarnings(state.getValidationIssues(), issues);
+        // 每个 add* 方法只负责一种风险，方便后续独立测试和扩展。
+        addDurationMismatchIssue(state, fullDraftText, issues); //天数不匹配
+        addDestinationMismatchIssues(state, fullDraftText, issues);//目的地遗漏
+        addCrowdConflictIssue(userText, fullDraftText, issues);// TODO: 当前避人流风险使用硬编码热门景点名单和固定阈值，判断较粗糙。后续改为基于景点热度评分、时间段、是否可选/错峰安排的综合风险评分。
+        addFlightBudgetConflictIssue(userText, draft, issues);//机票是否包含冲突
+        addToolUnavailableIssues(state.getBranchResults(), fullDraftText, issues);//工具失败产生幻觉
+        addValidationWarnings(state.getValidationIssues(), issues);//把 Validator 的部分问题转成风险提示
 
         return buildAssessment(issues);
     }
@@ -164,6 +170,7 @@ public class TripRiskReasoningNode {
             String raw = callModel(buildSystemPrompt(state), state.getUserQuery());
             return normalizeAssessment(parseAssessment(raw));
         } catch (Exception e) {
+            // 模型审查只是增强层，失败时保留规则审查结果即可。
             log.warn("[Graph][RiskReasoning] model audit failed: {}", e.getMessage());
             return RiskAssessment.clear();
         }

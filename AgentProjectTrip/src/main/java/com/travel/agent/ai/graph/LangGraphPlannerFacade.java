@@ -219,48 +219,85 @@ public class LangGraphPlannerFacade {
      * @return Graph 执行结果；失败时包含面向用户的降级答案
      */
     public GraphResult plan(GraphInputRequest request) {
+        // 外部调用者理论上应该传 request，但这里仍做兜底，避免 null 导致整个接口 500。
         GraphInputRequest safeRequest = request == null ? new GraphInputRequest() : request;
+
+        // sessionId 是“这轮对话”的钥匙：后面要靠它找到上一轮尚未完成的 pending 任务。
         String sessionId = normalizeSessionId(safeRequest.getSessionId());
         safeRequest.setSessionId(sessionId);
 
         try {
             log.info("[Graph] start clarification-capable planning workflow, sessionId={}", sessionId);
 
+            // Step 1：先判断这是不是“上一轮追问后的补充回答”。
+            //
+            // 例如：
+            //   第一轮：用户说“帮我规划欧洲旅行”
+            //   系统追问：“你想去几天？”
+            //   第二轮：用户说“10天”
+            //
+            // 第二轮的“10天”不能当作新任务处理，必须合并回上一轮 pendingState。
             TravelPlanState state = conversationStateStore.findPendingState(sessionId)
                     .map(pendingState -> {
                         log.info("[Graph] resume pending planning workflow, sessionId={}", sessionId);
+                        // 标记为续跑模式，后续节点可以知道当前输入是在补充旧任务。
                         safeRequest.setResumeMode(true);
                         return mergeClarificationNode.merge(pendingState, safeRequest);
                     })
                     .orElseGet(() -> initStateNode.init(safeRequest));
+
+            // Step 2：把用户长期偏好等记忆上下文写入状态，供 Planner 生成方案时参考。
+            // 这一步只补充参考信息，不覆盖用户本次明确输入。
             state = attachUserMemoryContext(state, sessionId);
 
+            // Step 3：前置澄清检查。
+            // 如果用户输入太模糊，先追问，不要浪费成本去查 RAG、调工具或调用大模型生成草稿。
             state = preClarifyCheckNode.check(state);
             if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
+                // 把缺失信息转换成自然语言问题，例如“你计划出行几天？”
                 state = clarifyQuestionNode.ask(state);
+
+                // 保存当前状态，等用户下一轮回答后，可以从这里继续跑。
                 conversationStateStore.savePendingState(sessionId, state);
                 log.info("[Graph] workflow paused before retrieval for clarification, sessionId={}, questions={}",
                         sessionId,
                         state.getPendingQuestions() == null ? 0 : state.getPendingQuestions().size());
+
+                // 这里的 success 表示“本次请求被成功处理并生成追问”，不是最终旅行方案已经完成。
                 return GraphResult.success(state.getFinalAnswer(), state.getValidationIssues());
             }
 
+            // Step 4：信息足够后，先从知识库检索旅行攻略、防坑信息等 RAG 上下文。
             state = retrieveKnowledgeNode.retrieve(state);
+
+            // Step 5：派发并执行分支 Agent 任务，例如天气、景点、航班、知识库补充等。
+            // 分支结果会写回 state，供后面的 Planner 使用。
             state = runBranchWorkflow(state);
+
+            // Step 6：调用 Planner 生成第一版旅行规划草稿。
             state = planDraftNode.plan(state);
+
+            // Step 7：校验草稿是否满足用户约束，或者是否仍缺少必须信息。
             state = validateDraftNode.validate(state);
 
+            // Validator 如果发现必须问用户的问题，就暂停流程，保存 pending 状态。
             if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
                 return pauseForClarification(sessionId, state);
             }
 
+            // Step 8：风险审查和自动修正。
+            // 例如检查天气冲突、预算冲突、行程过满等；可自动修正时会让 Planner 重写一版。
             state = runRiskAndRevisionWorkflow(state);
 
+            // 风险审查也可能发现必须由用户决定的问题，这时同样进入澄清暂停。
             if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
                 return pauseForClarification(sessionId, state);
             }
 
+            // Step 9：所有信息都齐了，把草稿、工具结果、风险提示整理成最终 Markdown 答案。
             state = finalizeAnswerNode.finish(state);
+
+            // 最终答案已经生成，本轮任务结束，清理 pending 状态，避免下一次对话误续跑旧任务。
             conversationStateStore.clearPendingState(sessionId);
 
             log.info("[Graph] workflow finished, sessionId={}, success={}, issues={}",
@@ -268,14 +305,18 @@ public class LangGraphPlannerFacade {
                     state.isSuccess(),
                     state.getValidationIssues() == null ? 0 : state.getValidationIssues().size());
 
+            // 正常成功：把最终答案和校验问题一起返回给上层 MastermindAgent / Controller。
             if (state.isSuccess()) {
                 return GraphResult.success(state.getFinalAnswer(), state.getValidationIssues());
             }
+
+            // 节点没有抛异常，但状态标记为失败：优先返回已有可读答案，否则返回统一兜底文案。
             return GraphResult.failure(
                     hasText(state.getFinalAnswer()) ? state.getFinalAnswer() : FAILURE_ANSWER,
                     state.getErrorMessage());
 
         } catch (Exception e) {
+            // 最外层兜底：任何节点异常都被包成 GraphResult，避免异常直接穿透到 Web 层。
             log.error("[Graph] workflow failed: {}", e.getMessage());
             log.debug("[Graph] workflow failure detail", e);
             return GraphResult.failure(FAILURE_ANSWER, e.getMessage());
@@ -289,9 +330,12 @@ public class LangGraphPlannerFacade {
      * 因此不会覆盖用户本次明确输入。</p>
      */
     private TravelPlanState attachUserMemoryContext(TravelPlanState state, String sessionId) {
+        // 测试环境或未启用记忆模块时 userMemoryService 可能为空，直接跳过即可。
         if (state == null || userMemoryService == null) {
             return state;
         }
+
+        // 生成一段适合放进 Planner prompt 的记忆摘要，而不是直接改写用户需求。
         state.setUserMemoryContext(userMemoryService.buildPromptContext(null, sessionId));
         return state;
     }
@@ -300,11 +344,16 @@ public class LangGraphPlannerFacade {
      * 进入澄清追问并保存 pending 状态。
      */
     private GraphResult pauseForClarification(String sessionId, TravelPlanState state) {
+        // 把 ValidationIssue / RiskIssue 这类机器可读问题，转换成用户能看懂的追问文本。
         TravelPlanState clarifiedState = clarifyQuestionNode.ask(state);
+
+        // 保存暂停状态。用户下一轮回答时，plan() 开头会通过 sessionId 找回它并继续执行。
         conversationStateStore.savePendingState(sessionId, clarifiedState);
         log.info("[Graph] workflow paused for clarification, sessionId={}, questions={}",
                 sessionId,
                 clarifiedState.getPendingQuestions() == null ? 0 : clarifiedState.getPendingQuestions().size());
+
+        // 这里返回 success 是因为“追问已成功生成”；真正的最终方案要等用户补充后再生成。
         return GraphResult.success(clarifiedState.getFinalAnswer(), clarifiedState.getValidationIssues());
     }
 
@@ -315,10 +364,15 @@ public class LangGraphPlannerFacade {
      * 包内兼容测试构造器不会注入这两个节点，此时保持第一、二阶段旧测试路径不变。</p>
      */
     private TravelPlanState runBranchWorkflow(TravelPlanState state) {
+        // 兼容旧测试构造器：旧测试没有注入分支节点时，直接跳过分支流程。
         if (branchDispatchNode == null || branchExecuteNode == null) {
             return state;
         }
+
+        // Dispatch 只负责“决定要做哪些分支任务”，例如天气、景点、航班。
         TravelPlanState dispatchedState = branchDispatchNode.dispatch(state);
+
+        // Execute 才真正调用 BranchAgentFacade / Tools，并把结果写回 state。
         return branchExecuteNode.execute(dispatchedState);
     }
 
@@ -328,21 +382,31 @@ public class LangGraphPlannerFacade {
      * <p>第一版最多自动修正 {@code maxRevisionCount} 次。风险节点或修正节点未注入时保持第三阶段旧行为。</p>
      */
     private TravelPlanState runRiskAndRevisionWorkflow(TravelPlanState state) {
+        // 兼容旧测试或未启用第四阶段节点的场景：没有风险节点就保持旧流程。
         if (tripRiskReasoningNode == null || planRevisionNode == null) {
             return state;
         }
 
+        // 先对当前草稿做风险审查，判断是否有冲突、过载、预算不匹配等问题。
         TravelPlanState assessedState = tripRiskReasoningNode.assess(state);
+
+        // 如果风险节点认为必须追问用户，把风险问题转换成澄清问题。
         assessedState = applyRiskClarificationIfNeeded(assessedState);
         if (assessedState.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
             return assessedState;
         }
+
+        // 如果问题可以自动修正，且还没超过最大修正次数，就进入 Revision。
         if (needsRevision(assessedState) && canRevise(assessedState)) {
             assessedState = planRevisionNode.revise(assessedState);
+
+            // 修正后重新校验，防止新草稿又产生新的硬性信息缺口。
             assessedState = validateDraftNode.validate(assessedState);
             if (assessedState.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
                 return assessedState;
             }
+
+            // 修正后的草稿再做一次风险审查，确认自动修正是否真的解决问题。
             assessedState = tripRiskReasoningNode.assess(assessedState);
             assessedState = applyRiskClarificationIfNeeded(assessedState);
         }
@@ -353,10 +417,12 @@ public class LangGraphPlannerFacade {
      * 将风险审查中“必须追问用户”的问题转为 ClarifyQuestionNode 可读取的 ValidationIssue。
      */
     private static TravelPlanState applyRiskClarificationIfNeeded(TravelPlanState state) {
+        // 没有风险审查结果，或者风险节点没有要求追问用户，就不改变状态。
         if (state == null || state.getRiskAssessment() == null || !state.getRiskAssessment().isNeedsClarification()) {
             return state;
         }
 
+        // ClarifyQuestionNode 读取的是 validationIssues，所以这里把风险问题转成校验问题。
         List<ValidationIssue> issues = new ArrayList<>(state.getValidationIssues() == null
                 ? List.of()
                 : state.getValidationIssues());
@@ -365,18 +431,22 @@ public class LangGraphPlannerFacade {
                 issues.add(ValidationIssue.high(issue.getCode(), issue.getMessage()));
             }
         }
+
+        // 标记为需要澄清后，plan() 主流程会调用 pauseForClarification() 暂停并追问。
         state.setValidationIssues(issues);
         state.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
         return state;
     }
 
     private static boolean needsRevision(TravelPlanState state) {
+        // 风险节点会设置 needsRevision，表示“这个草稿可以由系统自动改一版”。
         return state != null
                 && state.getRiskAssessment() != null
                 && state.getRiskAssessment().isNeedsRevision();
     }
 
     private static boolean canRevise(TravelPlanState state) {
+        // 防止自动修正无限循环：只能在 revisionCount 小于 maxRevisionCount 时继续重写。
         return state != null && state.getRevisionCount() < state.getMaxRevisionCount();
     }
 

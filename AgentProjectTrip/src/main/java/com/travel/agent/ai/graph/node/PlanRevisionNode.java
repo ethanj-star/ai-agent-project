@@ -95,21 +95,25 @@ public class PlanRevisionNode {
         if (state == null) {
             return new TravelPlanState();
         }
+        // 没有可自动修正风险，或当前没有草案时，不做任何重写。
         if (!hasRevisableRisk(state.getRiskAssessment()) || state.getDraft() == null) {
             return state;
         }
 
+        // 先增加计数，Facade 会用 revisionCount / maxRevisionCount 防止自动修正循环失控。
         state.setRevisionCount(state.getRevisionCount() + 1);
         String systemPrompt = buildRevisionPrompt(state);
         log.info("[Graph][PlanRevision] revising draft, revisionCount={}", state.getRevisionCount());
 
         try {
+            // 修正模型仍然返回 PlannerDraft JSON；解析失败时保留旧草案。
             String rawResponse = callModel(systemPrompt, state.getUserQuery());
             PlannerDraft revisedDraft = parseOrFallback(rawResponse, state.getDraft());
             normalizeDraft(revisedDraft, state);
             state.setDraft(revisedDraft);
             return state;
         } catch (Exception e) {
+            // 自动修正失败不是致命错误，保留原方案并把风险留给最终答案提示用户。
             log.warn("[Graph][PlanRevision] revision failed: {}", e.getMessage());
             appendAssumption(state.getDraft(), "系统尝试自动修正风险问题，但修正模型暂时不可用，以下方案仍需人工复核。");
             return state;
@@ -233,6 +237,7 @@ public class PlanRevisionNode {
      * @return 新版草案；解析失败时返回 fallbackDraft
      */
     PlannerDraft parseOrFallback(String rawResponse, PlannerDraft fallbackDraft) {
+        // 和 Planner 一样，Revision 也要兼容模型返回 Markdown fence 或解释文字。
         String cleaned = stripMarkdownFences(rawResponse);
         if (!hasText(cleaned)) {
             return fallbackDraft;
@@ -248,6 +253,7 @@ public class PlanRevisionNode {
                     log.warn("[Graph][PlanRevision] extracted JSON parse failed: {}", ignored.getMessage());
                 }
             }
+            // 解析失败时不丢旧草案，只追加一条 assumption 说明自动修正没有真正应用。
             appendAssumption(fallbackDraft, "自动修正模型未返回合法 JSON，系统保留原草案。");
             return fallbackDraft;
         }
@@ -272,6 +278,7 @@ public class PlanRevisionNode {
         if (draft == null) {
             return;
         }
+        // 修正结果缺字段时回退到旧草案，保证自动修正不会让答案结构变残缺。
         if (!hasText(draft.getTitle())) {
             draft.setTitle("欧洲旅行规划修正版");
         }

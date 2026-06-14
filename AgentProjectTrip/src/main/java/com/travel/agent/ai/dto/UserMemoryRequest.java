@@ -118,6 +118,7 @@ public class UserMemoryRequest {
     }
 
     public void setMetadata(Map<String, Object> metadata) {
+        // 对外入参允许省略 metadata；内部统一用空 Map，避免后续写入 JSON 时出现空指针。
         this.metadata = metadata == null ? new LinkedHashMap<>() : metadata;
     }
 }

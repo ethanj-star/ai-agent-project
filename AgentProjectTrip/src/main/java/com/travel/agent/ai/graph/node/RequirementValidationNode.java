@@ -17,8 +17,9 @@ import java.util.List;
  * <p>职责：
  * <ul>
  *   <li>读取第五阶段抽取出的 {@link TravelRequirementSpec}。</li>
- *   <li>检查目的地、时长、预算、币种、国际机票边界等关键字段是否完整。</li>
+ *   <li>检查目的地、时长、预算、币种等关键字段是否完整。</li>
  *   <li>把阻塞字段写入 {@link RequirementValidation}，避免信息不足时进入高成本规划链路。</li>
+ *   <li>把出发地、出行时间、国际机票边界等不确定信息写入 warning，让用户确认前看见风险。</li>
  *   <li>把校验结果同步回需求表状态，方便前端直接展示。</li>
  * </ul>
  * </p>
@@ -31,8 +32,8 @@ public class RequirementValidationNode {
      *
      * <p>处理流程：
      * <ol>
-     *   <li>检查硬阻塞字段：目的地、天数、预算金额、预算币种、国际机票边界。</li>
-     *   <li>检查强建议字段：旅行人数、出发城市、出行时间。</li>
+     *   <li>检查硬阻塞字段：目的地、天数、预算金额、预算币种。</li>
+     *   <li>检查强建议字段：旅行人数、出发城市、出行时间、国际机票预算边界。</li>
      *   <li>将缺失字段、阻塞原因和非阻塞警告写入 RequirementValidation。</li>
      *   <li>同步更新 spec.status、spec.missingFields 和 spec.warnings。</li>
      * </ol>
@@ -47,6 +48,7 @@ public class RequirementValidationNode {
         List<String> blockingReasons = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
+        // spec 为空是硬失败，Controller 会把这个结果展示给前端，而不是继续生成。
         if (spec == null) {
             missingFields.add("spec");
             blockingReasons.add("需求表为空，无法生成完整规划。");
@@ -57,11 +59,14 @@ public class RequirementValidationNode {
             return validation;
         }
 
+        // 硬阻塞字段缺失时，不允许确认需求表，也不允许扣费生成。
         validateDestinations(spec, missingFields, blockingReasons);
         validateDuration(spec, missingFields, blockingReasons);
         validateBudget(spec, missingFields, blockingReasons);
-        validateFlightBudgetBoundary(spec, missingFields, blockingReasons);
+
+        // 软字段缺失不会阻止确认，但会提示用户生成质量可能受影响。
         validateSoftFields(spec, missingFields, warnings);
+        validateFlightBudgetBoundary(spec, missingFields, warnings);
         validatePlausibility(spec, warnings);
 
         boolean complete = blockingReasons.isEmpty();
@@ -71,10 +76,12 @@ public class RequirementValidationNode {
         validation.setBlockingReasons(blockingReasons);
         validation.setWarnings(warnings);
 
+        // 校验结果同步回 spec，前端只拿 spec 时也能展示缺失项和警告。
         spec.setMissingFields(missingFields);
         spec.setWarnings(warnings);
         if (spec.getStatus() != RequirementStatus.GENERATING
                 && spec.getStatus() != RequirementStatus.GENERATED) {
+            // 生成中/已生成状态不能被普通校验覆盖；其他状态按校验结果推进。
             if (!complete) {
                 spec.setStatus(RequirementStatus.NEEDS_USER_INPUT);
             } else if (spec.getStatus() != RequirementStatus.CONFIRMED) {
@@ -120,15 +127,6 @@ public class RequirementValidationNode {
         }
     }
 
-    private static void validateFlightBudgetBoundary(TravelRequirementSpec spec,
-                                                     List<String> missingFields,
-                                                     List<String> blockingReasons) {
-        if (spec.getBudgetIncludesInternationalFlight() == null) {
-            missingFields.add("budgetIncludesInternationalFlight");
-            blockingReasons.add("请确认预算是否包含国际机票，避免后续预算误算。");
-        }
-    }
-
     private static void validateSoftFields(TravelRequirementSpec spec,
                                            List<String> missingFields,
                                            List<String> warnings) {
@@ -146,7 +144,18 @@ public class RequirementValidationNode {
         }
     }
 
+    private static void validateFlightBudgetBoundary(TravelRequirementSpec spec,
+                                                     List<String> missingFields,
+                                                     List<String> warnings) {
+        if (spec.getBudgetIncludesInternationalFlight() == null) {
+            // 第十阶段产品策略：机票是否包含只给 warning，不阻塞确认；用户可以后续在方案假设中看到这项风险。
+            missingFields.add("budgetIncludesInternationalFlight");
+            warnings.add("未确认预算是否包含国际机票，后续方案会把机票边界作为假设处理。");
+        }
+    }
+
     private static void validatePlausibility(TravelRequirementSpec spec, List<String> warnings) {
+        // Plausibility 只给 warning，不阻止确认；用户可以接受紧预算或快节奏行程。
         if (spec.getBudgetAmount() != null
                 && "EUR".equalsIgnoreCase(spec.getBudgetCurrency())
                 && spec.getDurationDays() != null
@@ -159,6 +168,13 @@ public class RequirementValidationNode {
                 && spec.getDestinations().size() >= 4
                 && spec.getDurationDays() <= 7) {
             warnings.add("目的地数量较多但天数较短，后续行程可能过赶。");
+        }
+        if (spec.getBudgetAmount() != null
+                && "CNY".equalsIgnoreCase(spec.getBudgetCurrency())
+                && spec.getDurationDays() != null
+                && spec.getDurationDays() >= 7
+                && spec.getBudgetAmount().compareTo(BigDecimal.valueOf(5000)) < 0) {
+            warnings.add("人民币预算对一周以上欧洲行程偏紧，后续方案可能需要大幅压缩住宿和交通成本。");
         }
     }
 

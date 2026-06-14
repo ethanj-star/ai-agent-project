@@ -86,23 +86,27 @@ public class PlanDraftNode {
      * @return 写入 draft 后的状态
      */
     public TravelPlanState plan(TravelPlanState state) {
+        // Planner 是高成本模型节点；如果连 state 都没有，就直接写入兜底草案，不再调用模型。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setDraft(buildFallbackDraft("规划状态为空，无法生成完整草案。"));
             return fallback;
         }
 
+        // Prompt 会把用户输入、结构化需求、RAG、分支结果和记忆统一注入给核心模型。
         String systemPrompt = buildSystemPrompt(state);
         log.info("[Graph][PlanDraft] planning with destinations={}, time={}",
                 state.getDestinations(), state.getTravelTime());
 
         try {
+            // 模型期望返回 PlannerDraft JSON；解析失败时 parseOrFallback 会降级成文本草案。
             String rawResponse = callModel(systemPrompt, state.getUserQuery());
             PlannerDraft draft = parseOrFallback(rawResponse);
             normalizeDraft(draft, state);
             state.setDraft(draft);
             return state;
         } catch (Exception e) {
+            // 核心模型不可用时仍写入 draft，后续 Finalizer 才能返回可读降级答案。
             log.error("[Graph][PlanDraft] model call failed: {}", e.getMessage());
             state.setDraft(buildFallbackDraft(
                     "规划模型暂时不可用，建议稍后重试，或先补充目的地、日期、预算等关键信息。"));
@@ -140,6 +144,7 @@ public class PlanDraftNode {
      * @return 完整系统提示词
      */
     String buildSystemPrompt(TravelPlanState state) {
+        // 各字段都先转成可读字符串，避免 prompt 里出现 null 或空集合。
         String destinations = state.getDestinations() == null || state.getDestinations().isEmpty()
                 ? "未指定"
                 : String.join("、", state.getDestinations());
@@ -266,6 +271,9 @@ public class PlanDraftNode {
         if (hasText(spec.getTransportPreference())) {
             lines.add("- 交通偏好：" + spec.getTransportPreference());
         }
+        if (hasText(spec.getSpecialNotes())) {
+            lines.add("- 特殊要求：" + spec.getSpecialNotes());
+        }
         return lines.isEmpty() ? "无。" : String.join("\n", lines);
     }
 
@@ -330,6 +338,7 @@ public class PlanDraftNode {
      * @return 解析或降级后的 PlannerDraft
      */
     PlannerDraft parseOrFallback(String rawResponse) {
+        // 模型偶发返回 Markdown fence；先清理，再尝试按纯 JSON 解析。
         String cleaned = stripMarkdownFences(rawResponse);
         if (!hasText(cleaned)) {
             return buildFallbackDraft("模型返回为空，暂时无法生成完整规划草案。");
@@ -338,6 +347,7 @@ public class PlanDraftNode {
         try {
             return objectMapper.readValue(cleaned, PlannerDraft.class);
         } catch (Exception first) {
+            // 如果模型多说了几句解释文字，尝试截取 JSON Object 再解析一次。
             String jsonObject = extractJsonObject(cleaned);
             if (hasText(jsonObject)) {
                 try {
@@ -346,6 +356,7 @@ public class PlanDraftNode {
                     log.warn("[Graph][PlanDraft] extracted JSON parse failed: {}", ignored.getMessage());
                 }
             }
+            // 仍失败时把原始文本作为 itineraryMarkdown，保证用户能看到模型产出的可读内容。
             PlannerDraft draft = buildFallbackDraft(cleaned);
             draft.setAssumptions(List.of("模型未返回合法 JSON，系统已按文本草案降级处理。"));
             return draft;
@@ -409,6 +420,7 @@ public class PlanDraftNode {
         if (draft == null) {
             return;
         }
+        // 下游 Validator / Finalizer 依赖这些字段，统一在这里补默认值。
         if (!hasText(draft.getTitle())) {
             draft.setTitle("欧洲旅行规划草案");
         }

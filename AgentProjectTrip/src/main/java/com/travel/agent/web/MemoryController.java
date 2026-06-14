@@ -64,7 +64,9 @@ public class MemoryController {
     public ResponseEntity<UserMemoryResponse> list(@RequestParam(required = false) String userId,
                                                    @RequestParam(required = false) String sessionId,
                                                    @RequestParam(required = false) MemoryScope scope) {
+        // 开发期前端可能只传 sessionId，这里统一解析成真正用于存储的 userId。
         String resolvedUserId = userContextResolver.resolveUserId(userId, sessionId);
+        // 只读取 active 记忆；被用户禁用的偏好不会再进入 Planner 上下文。
         List<UserMemory> memories = userMemoryService.findActive(resolvedUserId, sessionId, scope);
         return ResponseEntity.ok(new UserMemoryResponse(
                 resolvedUserId,
@@ -82,6 +84,7 @@ public class MemoryController {
      */
     @PostMapping
     public ResponseEntity<UserMemoryResponse> create(@RequestBody UserMemoryRequest request) {
+        // key/value 是记忆的最小可用结构，例如 key=hotel_preference, value=不住青旅。
         if (request == null || !hasText(request.getKey()) || !hasText(request.getValue())) {
             return ResponseEntity.badRequest().body(new UserMemoryResponse(
                     null,
@@ -99,8 +102,10 @@ public class MemoryController {
         memory.setSource(request.getSource());
         memory.setConfidence(request.getConfidence());
         memory.setMetadata(request.getMetadata());
+        // Service 会补齐 memoryId、默认 scope/type/source 等字段，并持久化。
         UserMemory saved = userMemoryService.save(memory);
 
+        // 保存后返回当前用户的完整生效记忆列表，前端可以直接刷新列表状态。
         List<UserMemory> memories = userMemoryService.findActive(saved.getUserId(), saved.getSessionId(), null);
         return ResponseEntity.ok(new UserMemoryResponse(
                 saved.getUserId(),
@@ -118,6 +123,7 @@ public class MemoryController {
      */
     @DeleteMapping("/{memoryId}")
     public ResponseEntity<UserMemoryResponse> deactivate(@PathVariable String memoryId) {
+        // 这里是软删除：保留记录用于审计，但后续 findActive 不再返回它。
         userMemoryService.deactivate(memoryId);
         return ResponseEntity.ok(new UserMemoryResponse(
                 null,

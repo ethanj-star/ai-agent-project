@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>旅行规划助手</title>
+  <link rel="stylesheet" href="./app.css?v=20260614-5">
+  <script defer src="./agent-app.js?v=20260614-5"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="topbar">
+      <div>
+        <p class="eyebrow">Travel Planner MVP</p>
+        <h1>旅行规划助手</h1>
+      </div>
+      <div class="status-strip" aria-label="当前流程状态">
+        <div class="status-pill">
+          <span>当前步骤</span>
+          <strong id="statusStep">准备开始</strong>
+        </div>
+        <div class="status-pill">
+          <span>需求状态</span>
+          <strong id="statusRequirement">未整理</strong>
+        </div>
+        <div class="status-pill">
+          <span>生成任务</span>
+          <strong id="statusJob">未创建</strong>
+        </div>
+        <div class="status-pill">
+          <span>生成额度</span>
+          <strong id="statusCredit">待生成</strong>
+        </div>
+        <div class="status-pill">
+          <span>方案版本</span>
+          <strong id="statusPlan">暂无</strong>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section class="workflow-panel" aria-labelledby="inputTitle">
+      <div class="section-heading">
+        <p class="step-label">Step 1</p>
+        <h2 id="inputTitle">告诉我你的旅行想法</h2>
+      </div>
+      <textarea id="messageInput" class="hero-input" placeholder="例如：国庆去法国和意大利玩10天，预算1200欧，不含国际机票，想避开人多的地方"></textarea>
+      <div class="button-row">
+        <button id="draftButton" type="button">整理需求</button>
+        <button id="exampleButton" type="button" class="secondary">填入示例</button>
+        <button id="resetButton" type="button" class="secondary">重新开始</button>
+      </div>
+      <p id="mainMessage" class="message-line" role="status"></p>
+    </section>
+
+    <section class="grid-layout">
+      <div class="left-column">
+        <section class="panel" aria-labelledby="requirementTitle">
+          <div class="section-heading compact">
+            <p class="step-label">Step 2</p>
+            <h2 id="requirementTitle">确认旅行需求</h2>
+          </div>
+
+          <div id="validationBox" class="notice muted">
+            先输入旅行想法，系统会把它整理成可确认的需求表。
+          </div>
+
+          <form id="requirementForm" class="form-grid" autocomplete="off">
+            <div class="form-group-title wide">基础信息</div>
+            <label class="field wide">
+              <span>目的地，用逗号分隔</span>
+              <input id="destinationsInput" type="text" placeholder="法国, 意大利">
+              <small class="field-hint" data-field-hint="destinations"></small>
+            </label>
+            <label class="field">
+              <span>出发地</span>
+              <input id="departureCityInput" type="text" placeholder="上海 / 北京 / Dublin">
+              <small class="field-hint" data-field-hint="departureCity"></small>
+            </label>
+            <label class="field">
+              <span>出行时间描述</span>
+              <input id="startDateTextInput" type="text" placeholder="国庆 / 下个月 / 2026年10月">
+              <small class="field-hint" data-field-hint="startDateText"></small>
+            </label>
+            <label class="field">
+              <span>开始日期</span>
+              <input id="startDateInput" type="date">
+              <small class="field-hint" data-field-hint="startDate"></small>
+            </label>
+            <label class="field">
+              <span>旅行天数</span>
+              <input id="durationDaysInput" type="number" min="1" placeholder="10">
+              <small class="field-hint" data-field-hint="durationDays"></small>
+            </label>
+            <label class="field">
+              <span>人数</span>
+              <input id="travelerCountInput" type="number" min="1" placeholder="1">
+              <small class="field-hint" data-field-hint="travelerCount"></small>
+            </label>
+            <div class="form-group-title wide">预算信息</div>
+            <label class="field">
+              <span>预算金额</span>
+              <input id="budgetAmountInput" type="number" min="0" step="0.01" placeholder="1200">
+              <small class="field-hint" data-field-hint="budgetAmount"></small>
+            </label>
+            <label class="field">
+              <span>预算币种</span>
+              <input id="budgetCurrencyInput" type="text" list="currencyOptions" placeholder="EUR">
+              <datalist id="currencyOptions">
+                <option value="EUR"></option>
+                <option value="CNY"></option>
+                <option value="USD"></option>
+                <option value="GBP"></option>
+              </datalist>
+              <small class="field-hint" data-field-hint="budgetCurrency"></small>
+            </label>
+            <label class="field">
+              <span>是否包含国际机票</span>
+              <select id="flightBudgetInput">
+                <option value="">未确定</option>
+                <option value="false">不包含</option>
+                <option value="true">包含</option>
+              </select>
+              <small class="field-hint" data-field-hint="budgetIncludesInternationalFlight"></small>
+            </label>
+            <div class="form-group-title wide">旅行偏好</div>
+            <label class="field">
+              <span>旅行风格</span>
+              <input id="travelStyleInput" type="text" list="travelStyleOptions" placeholder="慢游 / 小众 / 深度游">
+              <datalist id="travelStyleOptions">
+                <option value="慢游"></option>
+                <option value="小众"></option>
+                <option value="深度游"></option>
+                <option value="高舒适度"></option>
+                <option value="低预算"></option>
+                <option value="亲子"></option>
+              </datalist>
+              <small class="field-hint" data-field-hint="travelStyle"></small>
+            </label>
+            <label class="field">
+              <span>住宿偏好</span>
+              <input id="accommodationInput" type="text" list="accommodationOptions" placeholder="经济型酒店 / 民宿 / 青旅">
+              <datalist id="accommodationOptions">
+                <option value="青旅"></option>
+                <option value="民宿"></option>
+                <option value="经济型酒店"></option>
+                <option value="中档酒店"></option>
+                <option value="高舒适度酒店"></option>
+              </datalist>
+              <small class="field-hint" data-field-hint="accommodationPreference"></small>
+            </label>
+            <label class="field">
+              <span>交通偏好</span>
+              <input id="transportInput" type="text" list="transportOptions" placeholder="火车 / 少换乘 / 公共交通">
+              <datalist id="transportOptions">
+                <option value="火车"></option>
+                <option value="公共交通"></option>
+                <option value="少换乘"></option>
+                <option value="自驾"></option>
+                <option value="飞机优先"></option>
+              </datalist>
+              <small class="field-hint" data-field-hint="transportPreference"></small>
+            </label>
+            <label class="field wide">
+              <span>喜欢的内容，用逗号分隔</span>
+              <input id="preferencesInput" type="text" placeholder="美食, 小镇, 博物馆">
+              <small class="field-hint" data-field-hint="preferences"></small>
+            </label>
+            <label class="field wide">
+              <span>想避开的内容，用逗号分隔</span>
+              <input id="avoidancesInput" type="text" placeholder="人多, 网红景点, 赶路">
+              <small class="field-hint" data-field-hint="avoidances"></small>
+            </label>
+            <label class="field wide">
+              <span>特殊要求</span>
+              <textarea id="specialNotesInput" placeholder="例如：带老人，不想开车，每天不要太累，少走路"></textarea>
+              <small class="field-hint" data-field-hint="specialNotes"></small>
+            </label>
+          </form>
+
+          <div class="button-row">
+            <button id="saveRequirementButton" type="button" class="secondary">保存修改</button>
+            <button id="confirmRequirementButton" type="button">确认需求</button>
+            <button id="editRequirementButton" type="button" class="secondary">继续编辑</button>
+          </div>
+          <p id="confirmReason" class="confirm-reason">可以先自然语言整理，也可以直接填写表单后保存。</p>
+        </section>
+
+        <section class="panel" aria-labelledby="memoryTitle">
+          <div class="section-heading compact">
+            <p class="step-label">Preference</p>
+            <h2 id="memoryTitle">我的偏好记忆</h2>
+          </div>
+          <div class="memory-inputs">
+            <input id="memoryKeyInput" type="text" placeholder="偏好类型，例如 accommodationPreference">
+            <input id="memoryValueInput" type="text" placeholder="偏好内容，例如 不住青旅">
+            <button id="saveMemoryButton" type="button" class="secondary">保存记忆</button>
+          </div>
+          <div id="memoryList" class="list-box empty">暂无记忆。</div>
+        </section>
+      </div>
+
+      <div class="right-column">
+        <section class="panel" aria-labelledby="generationTitle">
+          <div class="section-heading compact">
+            <p class="step-label">Step 3</p>
+            <h2 id="generationTitle">生成进度</h2>
+          </div>
+          <div id="progressBox" class="progress-box">
+            <div class="progress-line">
+              <span id="progressStatus">等待确认需求</span>
+              <strong id="progressStage">-</strong>
+            </div>
+            <div id="jobMeta" class="job-meta">暂无生成任务。</div>
+            <div class="progress-track" aria-hidden="true">
+              <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <p id="progressMessage" class="subtle">确认需求后，才能开始生成完整方案。</p>
+            <div id="jobTimeline" class="job-timeline" aria-label="生成阶段时间线"></div>
+            <div id="jobAdvice" class="job-advice"></div>
+          </div>
+          <div class="button-row">
+            <button id="generateButton" type="button">生成完整方案</button>
+            <button id="reloadJobButton" type="button" class="secondary">刷新任务</button>
+            <button id="reloadRecentJobsButton" type="button" class="secondary">最近任务</button>
+          </div>
+          <div id="recentJobs" class="recent-jobs empty">暂无最近任务。</div>
+        </section>
+
+        <section class="panel result-panel" aria-labelledby="planTitle">
+          <div class="section-heading compact between">
+            <div>
+              <p class="step-label">Step 4</p>
+              <h2 id="planTitle">旅行方案</h2>
+            </div>
+            <div class="button-row inline">
+              <button id="copyPlanButton" type="button" class="secondary">复制</button>
+              <button id="reloadPlanButton" type="button" class="secondary">重新加载</button>
+            </div>
+          </div>
+          <article id="planAnswer" class="answer-box empty">
+            方案生成后会显示在这里。
+          </article>
+          <div id="versionList" class="version-list"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="modifyTitle">
+          <div class="section-heading compact">
+            <p class="step-label">Step 5</p>
+            <h2 id="modifyTitle">继续修改方案</h2>
+          </div>
+          <textarea id="modifyInput" placeholder="例如：把第3天安排轻松一点，预算再压低一些"></textarea>
+          <div class="button-row">
+            <button id="modifyButton" type="button">提交修改</button>
+          </div>
+          <p id="modifyMessage" class="message-line"></p>
+        </section>
+
+        <details class="panel debug-panel">
+          <summary>开发者调试 JSON</summary>
+          <pre id="rawJson">暂无接口响应。</pre>
+        </details>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

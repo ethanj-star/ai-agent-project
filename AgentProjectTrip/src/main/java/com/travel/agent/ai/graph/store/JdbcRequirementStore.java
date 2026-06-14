@@ -69,8 +69,10 @@ public class JdbcRequirementStore implements RequirementStore {
         String sessionId = normalizeSessionId(spec.getSessionId());
         spec.setSessionId(sessionId);
         String userId = sessionId;
+        // spec_json 保存完整需求表快照，普通列只保留查询和展示最常用字段。
         String specJson = jsonSupport.toJson(spec);
 
+        // draft、update、confirm 都通过同一个 save 入口，因此用 upsert 覆盖最新快照。
         jdbcTemplate.update("""
                         INSERT INTO travel_requirements
                           (requirement_id, session_id, user_id, status, original_message, spec_json)
@@ -110,6 +112,7 @@ public class JdbcRequirementStore implements RequirementStore {
                     requirementId);
             return Optional.ofNullable(jsonSupport.fromJson(json, TravelRequirementSpec.class));
         } catch (EmptyResultDataAccessException e) {
+            // 找不到需求表是正常业务分支，Controller 会把 empty 映射成 404。
             return Optional.empty();
         }
     }
@@ -129,6 +132,7 @@ public class JdbcRequirementStore implements RequirementStore {
     }
 
     private static String normalizeSessionId(String sessionId) {
+        // 开发期可能没有显式 sessionId，用固定值保证数据库非空字段和查询 key 稳定。
         return hasText(sessionId) ? sessionId.trim() : DEFAULT_SESSION_ID;
     }
 

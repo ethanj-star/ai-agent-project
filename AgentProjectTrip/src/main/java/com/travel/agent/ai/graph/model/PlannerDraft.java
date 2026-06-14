@@ -84,6 +84,7 @@ public class PlannerDraft {
     }
 
     public void setAssumptions(List<String> assumptions) {
+        // 模型可能不给 assumptions 字段；这里统一转空列表，Finalizer 可直接遍历。
         this.assumptions = assumptions == null ? new ArrayList<>() : assumptions;
     }
 }

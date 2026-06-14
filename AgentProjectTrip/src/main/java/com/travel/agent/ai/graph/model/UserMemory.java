@@ -93,6 +93,7 @@ public class UserMemory {
     }
 
     public void setScope(MemoryScope scope) {
+        // 未指定作用域时按短期记忆处理，避免意外写入长期偏好。
         this.scope = scope == null ? MemoryScope.SHORT_TERM : scope;
     }
 
@@ -101,6 +102,7 @@ public class UserMemory {
     }
 
     public void setType(MemoryType type) {
+        // 未指定类型时按偏好处理，这是旅行规划里最常见的记忆类别。
         this.type = type == null ? MemoryType.PREFERENCE : type;
     }
 
@@ -125,6 +127,7 @@ public class UserMemory {
     }
 
     public void setSource(MemorySource source) {
+        // 来源为空时标记为人工写入，方便和模型推断类来源区分。
         this.source = source == null ? MemorySource.MANUAL : source;
     }
 
@@ -133,6 +136,7 @@ public class UserMemory {
     }
 
     public void setConfidence(double confidence) {
+        // 可信度限制在 0 到 1，避免前端或模型写入异常分值。
         this.confidence = Math.max(0.0, Math.min(1.0, confidence));
     }
 
@@ -149,6 +153,7 @@ public class UserMemory {
     }
 
     public void setMetadata(Map<String, Object> metadata) {
+        // metadata 保持非 null，JDBC/JSON 序列化时可以直接写入空对象。
         this.metadata = metadata == null ? new LinkedHashMap<>() : metadata;
     }
 

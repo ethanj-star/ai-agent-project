@@ -82,6 +82,7 @@ public class TravelPlanRecord {
     }
 
     public void setCurrentVersion(int currentVersion) {
+        // 版本号从 1 开始，防止外部传 0 或负数导致 current() 找不到初版。
         this.currentVersion = Math.max(1, currentVersion);
     }
 
@@ -90,6 +91,7 @@ public class TravelPlanRecord {
     }
 
     public void setVersions(List<TravelPlanVersion> versions) {
+        // 重设版本列表后重新计算当前版本，避免 currentVersion 与列表内容不一致。
         this.versions = versions == null ? new ArrayList<>() : versions;
         this.currentVersion = currentVersionFromVersions(this.versions);
     }
@@ -140,6 +142,7 @@ public class TravelPlanRecord {
      * @return 找到时返回对应版本
      */
     public Optional<TravelPlanVersion> version(int versionNumber) {
+        // 空版本列表表示计划还没有可读内容，调用方用 Optional 决定是否返回 404。
         if (versions == null || versions.isEmpty()) {
             return Optional.empty();
         }
@@ -149,6 +152,7 @@ public class TravelPlanRecord {
     }
 
     private static int currentVersionFromVersions(List<TravelPlanVersion> versions) {
+        // 当前版本始终取列表里最大的版本号，适配数据库重组历史版本后的场景。
         if (versions == null || versions.isEmpty()) {
             return 1;
         }

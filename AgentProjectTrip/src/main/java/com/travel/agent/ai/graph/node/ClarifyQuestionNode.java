@@ -37,6 +37,7 @@ public class ClarifyQuestionNode {
      * @return 写入 pendingQuestions 和 finalAnswer 后的状态
      */
     public TravelPlanState ask(TravelPlanState state) {
+        // 上游传 null 时仍然给出通用追问，保证 API 不会返回空白或 500。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
@@ -46,11 +47,14 @@ public class ClarifyQuestionNode {
             return fallback;
         }
 
+        // 优先根据 Validator / RiskReasoning 产生的机器问题生成精准追问。
         List<ClarificationQuestion> questions = buildQuestions(state.getValidationIssues());
         if (questions.isEmpty()) {
+            // 没有可识别 code 时退回通用问题，仍然能推动用户补充关键信息。
             questions.add(genericQuestion());
         }
 
+        // finalAnswer 在这里临时存放“追问文本”，不是最终旅行方案。
         state.setPendingQuestions(questions);
         state.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
         state.setFinalAnswer(buildAnswer(questions));
@@ -70,12 +74,14 @@ public class ClarifyQuestionNode {
 
         for (ValidationIssue issue : issues) {
             ClarificationQuestion question = questionForIssue(issue);
+            // 同一个字段可能有多条 issue，只问一次，避免用户看到重复问题。
             if (question == null || addedFields.contains(question.getField())) {
                 continue;
             }
             questions.add(question);
             addedFields.add(question.getField());
             if (questions.size() >= MAX_QUESTIONS) {
+                // 追问数量控制在 3 个以内，减少用户补充成本。
                 break;
             }
         }
@@ -137,6 +143,7 @@ public class ClarifyQuestionNode {
         answer.append("可以，我先确认几个关键信息，这样后面规划会更准：\n\n");
         int index = 1;
         for (ClarificationQuestion question : questions) {
+            // 只渲染有文本的问题；结构化字段仍保留在 pendingQuestions 里给续跑逻辑使用。
             if (question != null && hasText(question.getQuestion())) {
                 answer.append(index++).append(". ").append(question.getQuestion().trim()).append("\n");
             }

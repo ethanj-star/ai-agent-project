@@ -54,6 +54,7 @@ public class RequirementValidation {
     }
 
     public void setMissingFields(List<String> missingFields) {
+        // 校验结果对前端展示很直接，空列表比 null 更容易渲染。
         this.missingFields = missingFields == null ? new ArrayList<>() : missingFields;
     }
 
@@ -62,6 +63,7 @@ public class RequirementValidation {
     }
 
     public void setWarnings(List<String> warnings) {
+        // warning 是非阻塞提醒，没有提醒时仍返回空列表。
         this.warnings = warnings == null ? new ArrayList<>() : warnings;
     }
 
@@ -70,6 +72,7 @@ public class RequirementValidation {
     }
 
     public void setBlockingReasons(List<String> blockingReasons) {
+        // 阻塞原因为空表示可以进入确认或生成流程。
         this.blockingReasons = blockingReasons == null ? new ArrayList<>() : blockingReasons;
     }
 }

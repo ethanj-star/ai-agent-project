@@ -54,6 +54,7 @@ public class BranchResult {
     }
 
     public static BranchResult success(BranchTask task, String summary, String rawData) {
+        // 成功结果保留原始任务 ID 和类型，Planner 可以知道这段信息来自哪个分支。
         return new BranchResult(
                 task == null ? null : task.getTaskId(),
                 task == null ? null : task.getType(),
@@ -64,6 +65,7 @@ public class BranchResult {
     }
 
     public static BranchResult failure(BranchTask task, String summary, String errorMessage) {
+        // 分支失败不抛出到主流程，而是变成可读摘要，让 Planner 以降级信息继续工作。
         return new BranchResult(
                 task == null ? null : task.getTaskId(),
                 task == null ? null : task.getType(),

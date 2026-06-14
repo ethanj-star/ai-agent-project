@@ -82,6 +82,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
         record.setSessionId(sessionId);
         String userId = sessionId;
 
+        // 主表只保存当前版本号和需求表快照；完整版本内容写入 travel_plan_versions。
         jdbcTemplate.update("""
                         INSERT INTO travel_plans
                           (plan_id, requirement_id, session_id, user_id, current_version, requirement_spec_json)
@@ -101,6 +102,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
                 record.getCurrentVersion(),
                 jsonSupport.toJson(record.getRequirementSpec()));
 
+        // save(record) 语义是“用当前对象快照覆盖数据库”，所以先删除旧版本再重写。
         jdbcTemplate.update("DELETE FROM travel_plan_versions WHERE plan_id = ?", record.getPlanId());
         if (record.getVersions() != null) {
             for (TravelPlanVersion version : record.getVersions()) {
@@ -129,6 +131,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
             if (record == null) {
                 return Optional.empty();
             }
+            // 主记录和版本表分开存储，读取时重新组装为领域对象。
             record.setVersions(findVersions(planId));
             return Optional.of(record);
         } catch (EmptyResultDataAccessException e) {
@@ -154,6 +157,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
         if (findById(planId).isEmpty()) {
             return Optional.empty();
         }
+        // 追加版本不重写所有历史版本，只 upsert 当前新版本并推进 current_version。
         insertOrUpdateVersion(planId, version);
         jdbcTemplate.update("""
                         UPDATE travel_plans
@@ -191,6 +195,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
     }
 
     private List<TravelPlanVersion> findVersions(String planId) {
+        // 版本按升序返回，TravelPlanRecord.current() 会基于 currentVersion 找最新版本。
         return jdbcTemplate.query(
                 "SELECT * FROM travel_plan_versions WHERE plan_id = ? ORDER BY version ASC",
                 (rs, rowNum) -> mapVersion(rs),
@@ -201,6 +206,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
         if (version == null) {
             return;
         }
+        // 版本里的 draft/risk/validationIssues 结构变化频繁，使用 JSON 列减少表结构变更。
         jdbcTemplate.update("""
                         INSERT INTO travel_plan_versions
                           (plan_id, version, final_answer, draft_json, risk_assessment_json,
@@ -225,6 +231,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
     }
 
     private TravelPlanRecord mapRecord(ResultSet rs) throws java.sql.SQLException {
+        // 只映射主表字段，版本列表由 findVersions 单独补齐。
         TravelPlanRecord record = new TravelPlanRecord();
         record.setPlanId(rs.getString("plan_id"));
         record.setRequirementId(rs.getString("requirement_id"));
@@ -239,6 +246,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
     }
 
     private TravelPlanVersion mapVersion(ResultSet rs) throws java.sql.SQLException {
+        // 单个版本包含最终答案和生成时的审查快照，用于后续版本对比和回滚。
         TravelPlanVersion version = new TravelPlanVersion();
         version.setVersion(rs.getInt("version"));
         version.setFinalAnswer(rs.getString("final_answer"));
@@ -260,6 +268,7 @@ public class JdbcTravelPlanStore implements TravelPlanStore {
     }
 
     private static String normalizeSessionId(String sessionId) {
+        // 开发期没有登录态时，用固定 sessionId 保证数据库字段和查询 key 稳定。
         return hasText(sessionId) ? sessionId.trim() : DEFAULT_SESSION_ID;
     }
 

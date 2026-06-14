@@ -26,6 +26,11 @@ public class KnowledgeTools {
 
     private final VectorStore vectorStore;
 
+    /**
+     * 构造私有知识库工具。
+     *
+     * @param vectorStore Spring AI VectorStore，当前由 Pinecone 实现
+     */
     public KnowledgeTools(VectorStore vectorStore) {
         this.vectorStore = vectorStore;
     }
@@ -39,16 +44,19 @@ public class KnowledgeTools {
     @Tool(description = "当用户询问关于旅游目的地的攻略、防坑指南、交通建议、最佳季节等经验性问题时，" +
             "必须调用此工具从私有知识库中检索相关经验。")
     public String searchTravelGuide(String query) {
+        // topK=2 控制上下文长度，避免 RAG 文档过多挤占 Planner prompt。
         List<Document> results = vectorStore.similaritySearch(
                 SearchRequest.builder().query(query).topK(2).build()
         );
 
         if (results == null || results.isEmpty()) {
+            // 返回可读提示而不是空字符串，调用方可以明确知道是“无命中”而不是工具没执行。
             return "私有知识库中暂无相关攻略。";
         }
 
         String combined = results.stream()
-                .map(Document::getText)    //  使用最新版本的正确 API
+                // Spring AI 新版本通过 getText() 读取文档正文。
+                .map(Document::getText)
                 .collect(Collectors.joining("\n\n"));
 
         return "检索到的参考攻略：\n" + combined;

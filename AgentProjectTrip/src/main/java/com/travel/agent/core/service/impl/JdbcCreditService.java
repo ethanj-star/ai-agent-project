@@ -65,6 +65,7 @@ public class JdbcCreditService implements CreditService {
     public boolean consumeGenerationCredit(String sessionId) {
         String userId = resolveUserId(sessionId);
         ensureAccount(userId);
+        // 条件更新把“检查余额”和“扣减余额”合成一个 SQL，避免并发请求扣成负数。
         int updated = jdbcTemplate.update("""
                         UPDATE credit_accounts
                         SET remaining_credits = remaining_credits - 1,
@@ -88,6 +89,7 @@ public class JdbcCreditService implements CreditService {
     public void refundGenerationCredit(String sessionId) {
         String userId = resolveUserId(sessionId);
         ensureAccount(userId);
+        // 退款恢复 remaining，并用 GREATEST 防止 consumed_credits 被重复退款扣成负数。
         jdbcTemplate.update("""
                         UPDATE credit_accounts
                         SET remaining_credits = remaining_credits + 1,
@@ -115,11 +117,13 @@ public class JdbcCreditService implements CreditService {
                     userId);
             return remaining;
         } catch (EmptyResultDataAccessException e) {
+            // ensureAccount 后理论上不会发生；这里兜底为 0，避免额度接口抛出数据库空结果异常。
             return 0;
         }
     }
 
     private void ensureAccount(String userId) {
+        // 开发期自动开户；正式支付系统接入后，这里可以替换为订单/账户服务。
         jdbcTemplate.update("""
                         INSERT INTO credit_accounts (user_id, remaining_credits, consumed_credits)
                         VALUES (?, ?, 0)

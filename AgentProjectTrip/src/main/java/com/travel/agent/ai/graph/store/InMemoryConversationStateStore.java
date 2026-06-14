@@ -37,6 +37,7 @@ public class InMemoryConversationStateStore implements ConversationStateStore {
             return Optional.empty();
         }
         TravelPlanState state = states.get(sessionId);
+        // 仓库只对外暴露“等待用户补充”的状态；其他状态即使存在也不允许续跑。
         if (state == null || state.getWorkflowStatus() != WorkflowStatus.NEEDS_CLARIFICATION) {
             return Optional.empty();
         }
@@ -49,6 +50,7 @@ public class InMemoryConversationStateStore implements ConversationStateStore {
             return;
         }
         if (state.getWorkflowStatus() == WorkflowStatus.NEEDS_CLARIFICATION) {
+            // 同一个 session 只保留最新 pending 任务，用户下一轮回答会续跑这份状态。
             states.put(sessionId, state);
         }
     }
@@ -56,6 +58,7 @@ public class InMemoryConversationStateStore implements ConversationStateStore {
     @Override
     public void clearPendingState(String sessionId) {
         if (hasText(sessionId)) {
+            // 最终答案生成后必须清理，否则下一次普通输入会被误判为上一轮澄清回答。
             states.remove(sessionId);
         }
     }

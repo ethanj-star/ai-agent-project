@@ -79,6 +79,9 @@ public class TravelRequirementSpec {
     /** 交通偏好，例如火车、自驾、公共交通、少换乘。 */
     private String transportPreference;
 
+    /** 无法归入固定字段的特殊要求，例如带老人、少走路、不想开车、每天不要太累。 */
+    private String specialNotes;
+
     /** 当前需求表生命周期状态。 */
     private RequirementStatus status = RequirementStatus.DRAFT;
 
@@ -224,11 +227,20 @@ public class TravelRequirementSpec {
         this.transportPreference = transportPreference;
     }
 
+    public String getSpecialNotes() {
+        return specialNotes;
+    }
+
+    public void setSpecialNotes(String specialNotes) {
+        this.specialNotes = specialNotes == null || specialNotes.isBlank() ? null : specialNotes.trim();
+    }
+
     public RequirementStatus getStatus() {
         return status;
     }
 
     public void setStatus(RequirementStatus status) {
+        // 未显式传状态时保持草稿，避免新抽取的需求被误认为已经确认。
         this.status = status == null ? RequirementStatus.DRAFT : status;
     }
 
@@ -249,6 +261,7 @@ public class TravelRequirementSpec {
     }
 
     private static List<String> cleanList(List<String> values) {
+        // 需求表列表字段来自模型和前端，统一去掉 null、空字符串和首尾空格。
         List<String> cleaned = new ArrayList<>();
         if (values == null || values.isEmpty()) {
             return cleaned;

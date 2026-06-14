@@ -58,16 +58,19 @@ public class JdbcConversationStateStore implements ConversationStateStore {
     public Optional<TravelPlanState> findPendingState(String sessionId) {
         String normalizedSessionId = normalizeSessionId(sessionId);
         try {
+            // state_json 是完整 TravelPlanState 快照，用户补充回答时从这里恢复 Graph 上下文。
             String json = jdbcTemplate.queryForObject(
                     "SELECT state_json FROM conversation_sessions WHERE session_id = ?",
                     String.class,
                     normalizedSessionId);
             TravelPlanState state = jsonSupport.fromJson(json, TravelPlanState.class);
+            // 只允许 NEEDS_CLARIFICATION 状态续跑，防止数据库里残留的非 pending 记录误触发。
             if (state == null || state.getWorkflowStatus() != WorkflowStatus.NEEDS_CLARIFICATION) {
                 return Optional.empty();
             }
             return Optional.of(state);
         } catch (EmptyResultDataAccessException e) {
+            // 没有会话记录是正常情况，表示这是新任务而不是澄清续跑。
             return Optional.empty();
         }
     }
@@ -87,6 +90,7 @@ public class JdbcConversationStateStore implements ConversationStateStore {
         }
         String normalizedSessionId = normalizeSessionId(sessionId);
         String userId = normalizedSessionId;
+        // 使用 upsert 保证同一个会话只有一条最新 pending 状态。
         jdbcTemplate.update("""
                         INSERT INTO conversation_sessions
                           (session_id, user_id, current_requirement_id, state_json)
@@ -110,10 +114,12 @@ public class JdbcConversationStateStore implements ConversationStateStore {
      */
     @Override
     public void clearPendingState(String sessionId) {
+        // 任务完成后删除整条会话状态，避免后续消息被当成旧任务补充。
         jdbcTemplate.update("DELETE FROM conversation_sessions WHERE session_id = ?", normalizeSessionId(sessionId));
     }
 
     private static String normalizeSessionId(String sessionId) {
+        // 开发/调试接口可能没有显式 sessionId，用固定 key 让澄清循环仍能工作。
         return hasText(sessionId) ? sessionId.trim() : DEFAULT_SESSION_ID;
     }
 

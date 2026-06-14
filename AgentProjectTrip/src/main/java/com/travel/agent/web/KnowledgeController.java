@@ -52,11 +52,13 @@ public class KnowledgeController {
     public ResponseEntity<String> ingest(
             @RequestParam(defaultValue = "france_italy_entities.jsonl") String fileName) {
 
+        // fileName 为空时无法定位 data/extracted 下的文件，提前返回 400。
         if (fileName.isBlank()) {
             return ResponseEntity.badRequest()
                     .body("ERROR: 'fileName' 参数不能为空。");
         }
 
+        // 具体的文件读取、Document 构造、Embedding 和向量库写入都封装在 Service 层。
         knowledgeBaseService.ingestRealKnowledge(fileName);
 
         return ResponseEntity.ok(

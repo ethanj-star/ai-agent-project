@@ -48,6 +48,7 @@ public class TravelPlanVersion {
     }
 
     public void setVersion(int version) {
+        // 单个版本号也从 1 开始，保持和 TravelPlanRecord 的约束一致。
         this.version = Math.max(1, version);
     }
 
@@ -80,6 +81,7 @@ public class TravelPlanVersion {
     }
 
     public void setValidationIssues(List<ValidationIssue> validationIssues) {
+        // 没有校验问题时保存空列表，历史版本详情接口可以稳定返回数组。
         this.validationIssues = validationIssues == null ? new ArrayList<>() : validationIssues;
     }
 

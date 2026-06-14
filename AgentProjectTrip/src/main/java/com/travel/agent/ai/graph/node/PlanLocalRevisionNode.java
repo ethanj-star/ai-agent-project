@@ -79,6 +79,7 @@ public class PlanLocalRevisionNode {
     public PlanLocalRevisionResult revise(TravelPlanRecord record,
                                           PlanModificationDecision decision,
                                           String instruction) {
+        // 没有当前版本就无法做“局部修改”；调用方收到 failure 后不应新增版本。
         if (record == null || record.current().isEmpty()) {
             return PlanLocalRevisionResult.failure("当前计划不存在，无法修改。");
         }
@@ -88,9 +89,11 @@ public class PlanLocalRevisionNode {
         }
 
         try {
+            // Prompt 中会带当前完整答案，要求模型在原文基础上最小必要修改。
             String raw = callModel(buildSystemPrompt(record, current, decision), instruction);
             return parseResult(raw, decision);
         } catch (Exception e) {
+            // 局部修改失败不能破坏已有计划；返回 failure，让 Controller 保持原版本不变。
             log.error("[Graph][PlanLocalRevision] model call failed: {}", e.getMessage());
             return PlanLocalRevisionResult.failure(e.getMessage());
         }
@@ -100,6 +103,7 @@ public class PlanLocalRevisionNode {
      * 调用核心模型。
      */
     protected String callModel(String systemPrompt, String userInstruction) {
+        // 这里调用核心模型做文本重写，但系统提示词约束它不能改变核心需求字段。
         return coreChatClient.prompt()
                 .system(systemPrompt)
                 .user(hasText(userInstruction) ? userInstruction : "请根据修改要求局部调整当前旅行计划。")
@@ -168,6 +172,7 @@ public class PlanLocalRevisionNode {
      * 解析模型局部修改结果。
      */
     PlanLocalRevisionResult parseResult(String raw, PlanModificationDecision decision) {
+        // 模型仍可能输出 Markdown fence，先清理再解析 JSON。
         String cleaned = stripMarkdownFences(raw);
         if (!hasText(cleaned)) {
             return PlanLocalRevisionResult.failure("模型返回为空。");
@@ -175,6 +180,7 @@ public class PlanLocalRevisionNode {
         try {
             return parseJsonResult(cleaned, decision);
         } catch (Exception first) {
+            // 如果模型在 JSON 外多输出了解释文字，尝试截取 JSON Object 再解析一次。
             String json = extractJsonObject(cleaned);
             if (hasText(json) && !json.equals(cleaned)) {
                 try {
@@ -183,6 +189,7 @@ public class PlanLocalRevisionNode {
                     log.warn("[Graph][PlanLocalRevision] extracted JSON parse failed: {}", ignored.getMessage());
                 }
             }
+            // 解析失败时不把模型文本当成新版本，避免把不完整内容覆盖原计划。
             return PlanLocalRevisionResult.failure("模型没有返回合法 JSON。");
         }
     }
@@ -194,6 +201,7 @@ public class PlanLocalRevisionNode {
             return PlanLocalRevisionResult.failure("模型没有返回 answer 字段。");
         }
         String summary = text(root, "modificationSummary");
+        // summary 缺失时回退到意图识别阶段的 instructionSummary，保证版本历史有可读修改说明。
         return PlanLocalRevisionResult.success(
                 answer,
                 hasText(summary) ? summary : defaultText(decision == null ? null : decision.getInstructionSummary(), "已根据用户反馈局部修改计划。"));

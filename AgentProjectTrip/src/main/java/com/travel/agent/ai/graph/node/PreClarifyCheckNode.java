@@ -34,6 +34,7 @@ public class PreClarifyCheckNode {
      * @return 写入 validationIssues 和 workflowStatus 后的状态
      */
     public TravelPlanState check(TravelPlanState state) {
+        // 上游状态为空时，没有任何可规划信息，只能进入澄清。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
@@ -43,18 +44,22 @@ public class PreClarifyCheckNode {
         }
 
         List<ValidationIssue> issues = new ArrayList<>();
+        // 目的地是规划的硬前提；没有目的地时，RAG 和 Planner 都很难给出可靠答案。
         if (state.getDestinations() == null || state.getDestinations().isEmpty()) {
             issues.add(ValidationIssue.high("MISSING_DESTINATION", "用户没有提供明确目的地。"));
         } else if (hasOnlyBroadDestination(state.getDestinations())) {
+            // “欧洲/国外/随便”太宽泛，先追问比生成一个泛泛路线更有价值。
             issues.add(ValidationIssue.medium("BROAD_DESTINATION",
                     "用户只提供了较宽泛的目的地范围，建议补充具体国家或城市。"));
         }
 
         if (issues.isEmpty()) {
+            // 前置检查只拦截硬性目的地缺口，其他缺口留给后续 Validator 判断是否阻塞。
             state.setWorkflowStatus(WorkflowStatus.PLANNING);
             return state;
         }
 
+        // 有硬缺口时写入 validationIssues，后续 ClarifyQuestionNode 会把它转成用户追问。
         state.setValidationIssues(issues);
         state.setWorkflowStatus(WorkflowStatus.NEEDS_CLARIFICATION);
         return state;

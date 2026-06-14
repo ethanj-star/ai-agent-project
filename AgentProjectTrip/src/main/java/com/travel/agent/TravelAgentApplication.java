@@ -20,6 +20,7 @@ import org.springframework.cache.annotation.EnableCaching;
 public class TravelAgentApplication {
 
     public static void main(String[] args) {
+        // 启动 Spring 容器后，Web Controller、Service、Agent、工具和缓存配置都会被自动扫描注册。
         SpringApplication.run(TravelAgentApplication.class, args);
     }
 }

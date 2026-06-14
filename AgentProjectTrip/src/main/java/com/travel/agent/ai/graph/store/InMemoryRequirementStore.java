@@ -44,6 +44,7 @@ public class InMemoryRequirementStore implements RequirementStore {
         if (spec == null || spec.getRequirementId() == null || spec.getRequirementId().isBlank()) {
             throw new IllegalArgumentException("requirementId must not be blank");
         }
+        // requirementId 是唯一 key；保存同一个 ID 会覆盖旧草稿，符合前端编辑表单的语义。
         store.put(spec.getRequirementId(), spec);
         return spec;
     }
@@ -59,6 +60,7 @@ public class InMemoryRequirementStore implements RequirementStore {
         if (requirementId == null || requirementId.isBlank()) {
             return Optional.empty();
         }
+        // Optional 让 Controller 自然映射成 404，而不是到处判 null。
         return Optional.ofNullable(store.get(requirementId));
     }
 
@@ -70,6 +72,7 @@ public class InMemoryRequirementStore implements RequirementStore {
     @Override
     public void delete(String requirementId) {
         if (requirementId != null && !requirementId.isBlank()) {
+            // 删除不存在的 key 是幂等操作，不需要抛异常。
             store.remove(requirementId);
         }
     }

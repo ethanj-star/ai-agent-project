@@ -49,6 +49,7 @@ public class FlightTools {
      */
     @Tool(description = "根据出发地和目的地的三字机场代码（IATA）及日期查询单程航班价格。注意：必须使用具体的物理机场代码（例如：飞往巴黎必须使用 'CDG' 或 'ORY'，绝对不要使用泛城市代码 'PAR'；伦敦使用 'LHR' 等）。日期格式必须为 YYYY-MM-DD。")
     public List<FlightDTO> searchFlights(String origin, String destination, String date) {
+        // Tools 层不做业务计算，只把模型提取出的参数交给 Service；失败兜底由 Service 统一处理。
         return flightService.searchFlights(origin, destination, date);
     }
 }

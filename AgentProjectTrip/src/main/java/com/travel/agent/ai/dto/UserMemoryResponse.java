@@ -33,6 +33,7 @@ public class UserMemoryResponse {
 
     public UserMemoryResponse(String userId, List<UserMemory> memories, String assistantMessage) {
         this.userId = userId;
+        // 响应里始终返回列表而不是 null，前端渲染时可以直接遍历。
         this.memories = memories == null ? new ArrayList<>() : memories;
         this.assistantMessage = assistantMessage;
     }
@@ -50,6 +51,7 @@ public class UserMemoryResponse {
     }
 
     public void setMemories(List<UserMemory> memories) {
+        // setter 同样做 null 保护，兼容 Jackson 或测试代码传入空列表字段。
         this.memories = memories == null ? new ArrayList<>() : memories;
     }
 

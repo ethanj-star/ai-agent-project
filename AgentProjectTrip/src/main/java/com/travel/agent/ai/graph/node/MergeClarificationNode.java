@@ -36,9 +36,11 @@ public class MergeClarificationNode {
      * @return 可继续进入 RAG / Planner 的新状态
      */
     public TravelPlanState merge(TravelPlanState pendingState, GraphInputRequest request) {
+        // pendingState 是上一轮暂停时保存的任务；为空时仍创建新状态，避免续跑入口崩溃。
         TravelPlanState state = pendingState == null ? new TravelPlanState() : pendingState;
         String currentMessage = request == null ? null : request.getUserQuery();
 
+        // 当前输入通常只是“10天”“预算2000欧”这类补充，必须合并回原始 userQuery。
         state.setSessionId(resolveSessionId(request, state));
         state.setLastUserMessage(currentMessage);
         state.setUserQuery(mergeUserQuery(state.getUserQuery(), currentMessage));
@@ -51,6 +53,7 @@ public class MergeClarificationNode {
         state.setKeywords(resolveKeywords(state, request));
         state.setClarificationAnswers(appendAnswer(state.getClarificationAnswers(), currentMessage));
 
+        // 续跑前清理上一轮中间产物：旧草案、旧风险、旧分支结果都不应污染新一轮生成。
         state.setPendingQuestions(new ArrayList<>());
         state.setValidationIssues(new ArrayList<>());
         state.setBranchTasks(new ArrayList<>());
@@ -76,6 +79,7 @@ public class MergeClarificationNode {
         if (!hasText(currentMessage)) {
             return oldQuery.trim();
         }
+        // 保留“用户补充信息”标签，Planner 能区分原始需求和后续回答。
         return oldQuery.trim() + "\n用户补充信息：" + currentMessage.trim();
     }
 
@@ -89,6 +93,7 @@ public class MergeClarificationNode {
     private static List<String> resolveDestinations(TravelPlanState state, GraphInputRequest request) {
         List<String> newLocations = safeList(entities(request) == null ? null : entities(request).getLocations());
         if (!newLocations.isEmpty()) {
+            // 用户补充中给出更明确目的地时，使用新地点覆盖旧的宽泛目的地。
             return newLocations;
         }
         return state == null ? new ArrayList<>() : safeList(state.getDestinations());
@@ -97,6 +102,7 @@ public class MergeClarificationNode {
     private static String resolveTravelTime(TravelPlanState state, GraphInputRequest request) {
         String newTime = entities(request) == null ? null : entities(request).getTime();
         if (hasText(newTime) && !DurationParser.isDurationExpression(newTime)) {
+            // 新输入如果是“国庆”“下个月”这类真实时间，就刷新 travelTime。
             return newTime.trim();
         }
         return state == null || !hasText(state.getTravelTime()) ? "未指定" : state.getTravelTime();
@@ -108,6 +114,7 @@ public class MergeClarificationNode {
                 entities(request) == null ? null : entities(request).getTime(),
                 safeList(entities(request) == null ? null : entities(request).getKeywords()));
         if (newDuration.present()) {
+            // 新输入里出现明确时长时优先采用，例如用户回答“10天”。
             return newDuration;
         }
         if (state != null && state.getDurationDays() != null && hasText(state.getDurationText())) {
@@ -118,6 +125,7 @@ public class MergeClarificationNode {
 
     private static List<String> resolveKeywords(TravelPlanState state, GraphInputRequest request) {
         Set<String> merged = new LinkedHashSet<>();
+        // LinkedHashSet 保留原有顺序并去重；同时移除已识别为 duration 的关键词。
         merged.addAll(DurationParser.removeDurationKeywords(state == null ? List.of() : safeList(state.getKeywords())));
         merged.addAll(DurationParser.removeDurationKeywords(
                 safeList(entities(request) == null ? null : entities(request).getKeywords())));

@@ -51,6 +51,7 @@ public class RetrieveKnowledgeNode {
      * @return 写入 ragContext 后的状态
      */
     public TravelPlanState retrieve(TravelPlanState state) {
+        // RAG 节点失败不应阻塞规划；state 为空时写兜底上下文即可。
         if (state == null) {
             TravelPlanState fallback = new TravelPlanState();
             fallback.setRagContext(FALLBACK_CONTEXT);
@@ -61,6 +62,7 @@ public class RetrieveKnowledgeNode {
         log.info("[Graph][RetrieveKnowledge] query={}", query);
 
         try {
+            // KnowledgeTools 内部会访问向量库；这里把异常包住，避免外部知识库故障打断 Graph。
             String context = knowledgeTools.searchTravelGuide(query);
             // 工具正常返回但没有命中内容时，也写入显式提示，便于 Validator 识别 RAG 不足
             if (!hasText(context)) {
@@ -88,6 +90,7 @@ public class RetrieveKnowledgeNode {
     String buildQuery(TravelPlanState state) {
         StringBuilder query = new StringBuilder();
 
+        // 用户原文通常包含最完整语义，先放原文，再追加结构化实体增强召回。
         if (hasText(state.getUserQuery())) {
             query.append(state.getUserQuery()).append(' ');
         }
@@ -105,6 +108,7 @@ public class RetrieveKnowledgeNode {
         }
 
         String result = query.toString().trim();
+        // 极端情况下没有任何状态字段，仍返回一个通用 query，保证向量检索参数非空。
         return result.isEmpty() ? "欧洲旅行攻略 防坑 行程 交通 建议" : result;
     }
 

@@ -83,6 +83,7 @@ public class PlanController {
      */
     @GetMapping("/{planId}")
     public ResponseEntity<TravelPlanRecordResponse> getPlan(@PathVariable String planId) {
+        // 对外只返回响应 DTO，避免把内部存储字段原样暴露给前端。
         return travelPlanStore.findById(planId)
                 .map(record -> ResponseEntity.ok(TravelPlanRecordResponse.from(record)))
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -98,6 +99,7 @@ public class PlanController {
     @GetMapping("/{planId}/versions/{version}")
     public ResponseEntity<TravelPlanVersion> getVersion(@PathVariable String planId,
                                                         @PathVariable int version) {
+        // 版本查询用于历史回看：当前版本和旧版本都从 TravelPlanStore 统一读取。
         return travelPlanStore.findVersion(planId, version)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
@@ -123,10 +125,12 @@ public class PlanController {
     @PostMapping("/{planId}/modify")
     public ResponseEntity<PlanModificationResponse> modify(@PathVariable String planId,
                                                            @RequestBody PlanModificationRequest request) {
+        // 修改指令必须是自然语言文本，否则无法判断是局部重写还是核心需求变更。
         if (request == null || !hasText(request.getMessage())) {
             return ResponseEntity.badRequest().body(errorResponse(planId, "参数 message 不能为空。"));
         }
 
+        // 先定位当前计划；找不到计划就不能构造修改上下文。
         return travelPlanStore.findById(planId)
                 .map(record -> handleModification(record, request.getMessage()))
                 .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -134,6 +138,7 @@ public class PlanController {
     }
 
     private ResponseEntity<PlanModificationResponse> handleModification(TravelPlanRecord record, String message) {
+        // 先由 Agent 判断用户是在改局部行程、改核心需求、追问，还是普通评论。
         PlanModificationDecision decision = modificationAgent.decide(record, message);
         PlanModificationIntent intent = decision.getIntent();
         if (intent == PlanModificationIntent.LOCAL_REVISION) {
@@ -143,6 +148,7 @@ public class PlanController {
             return handleRequirementChange(record, decision);
         }
         if (intent == PlanModificationIntent.CLARIFICATION) {
+            // 追问信息不足时不创建新版本，只把问题返回给前端继续对话。
             PlanModificationResponse response = baseResponse(record.getPlanId(), intent);
             response.setStatus("NEEDS_CLARIFICATION");
             response.setQuestion(defaultText(decision.getClarificationQuestion(), "你想修改哪一天或哪一部分行程？"));
@@ -150,6 +156,7 @@ public class PlanController {
             return ResponseEntity.ok(response);
         }
         if (intent == PlanModificationIntent.DIRECT_COMMENT) {
+            // 普通评论不改变计划内容，例如“好的”“谢谢”，只返回温和确认。
             PlanModificationResponse response = baseResponse(record.getPlanId(), intent);
             response.setStatus("DIRECT_COMMENT");
             response.setAssistantMessage("好的，这版计划先保持不变。你后续可以继续告诉我想改哪一天或哪一部分。");
@@ -165,8 +172,10 @@ public class PlanController {
     private ResponseEntity<PlanModificationResponse> handleLocalRevision(TravelPlanRecord record,
                                                                          PlanModificationDecision decision,
                                                                          String message) {
+        // 局部重写只改当前答案文本，不改原始需求表；成功后会追加一个新版本。
         PlanLocalRevisionResult result = localRevisionNode.revise(record, decision, message);
         if (!result.isSuccess()) {
+            // 失败时保留当前版本，避免半成品覆盖用户已经看到的计划。
             PlanModificationResponse response = baseResponse(record.getPlanId(), PlanModificationIntent.LOCAL_REVISION);
             response.setStatus("REVISION_FAILED");
             response.setAssistantMessage("局部修改失败，当前计划版本已保留。原因：" + result.getErrorMessage());
@@ -179,6 +188,7 @@ public class PlanController {
         version.setFinalAnswer(result.getAnswer());
         version.setModificationSummary(result.getModificationSummary());
         version.setUserInstruction(message);
+        // addVersion 内部会更新 currentVersion，让后续 getPlan 读到最新版。
         travelPlanStore.addVersion(record.getPlanId(), version);
 
         PlanModificationResponse response = baseResponse(record.getPlanId(), PlanModificationIntent.LOCAL_REVISION);
@@ -191,13 +201,16 @@ public class PlanController {
 
     private ResponseEntity<PlanModificationResponse> handleRequirementChange(TravelPlanRecord record,
                                                                             PlanModificationDecision decision) {
+        // 核心需求变更会回写需求表，例如换目的地、改预算、改天数，需要重新确认再生成。
         TravelRequirementSpec updatedSpec =
                 requirementPatchNode.apply(record.getRequirementSpec(), decision.getRequirementPatch());
+        // 标记回 DRAFT，防止用户误以为旧的确认仍然适用于新需求。
         updatedSpec.setStatus(RequirementStatus.DRAFT);
         RequirementValidation validation = requirementValidationNode.validate(updatedSpec);
         requirementStore.save(updatedSpec);
 
         PlanModificationResponse response = baseResponse(record.getPlanId(), PlanModificationIntent.REQUIREMENT_CHANGE);
+        // 如果新需求已完整，只需要用户确认；否则要求先补齐缺失字段。
         response.setStatus(validation.isReadyToConfirm()
                 ? "REQUIREMENT_NEEDS_CONFIRMATION"
                 : "REQUIREMENT_NEEDS_USER_INPUT");

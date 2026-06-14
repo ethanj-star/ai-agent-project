@@ -91,7 +91,8 @@ public class RequirementExtractionAgent {
               "avoidances": ["string"],
               "travelStyle": "string or null",
               "accommodationPreference": "string or null",
-              "transportPreference": "string or null"
+              "transportPreference": "string or null",
+              "specialNotes": "string or null"
             }
             """;
 
@@ -146,18 +147,22 @@ public class RequirementExtractionAgent {
      * @return 结构化需求表草稿
      */
     public TravelRequirementSpec extract(String sessionId, String message) {
+        // 先跑规则抽取，得到一份确定性较强的草稿；它同时也是模型失败时的兜底结果。
         TravelRequirementSpec fallback = extractByRules(sessionId, message);
         TravelRequirementSpec extracted = fallback;
 
         if (chatClient != null && hasText(message)) {
             try {
+                // 模型负责补充规则难以覆盖的表达，例如复杂住宿偏好或自然语言目的地组合。
                 String raw = callModel(message);
                 extracted = parseOrFallback(raw, fallback);
             } catch (Exception e) {
+                // 抽取失败不能让用户卡在入口；返回规则草稿，前端仍可让用户手动编辑。
                 log.warn("[RequirementExtraction] model call failed, use rule fallback: {}", e.getMessage());
             }
         }
 
+        // 用规则结果补齐模型漏掉的确定性字段，再统一设置 ID、会话和状态。
         mergeMissingFields(extracted, fallback);
         normalize(extracted, sessionId, message);
         return extracted;
@@ -170,6 +175,7 @@ public class RequirementExtractionAgent {
      * @return 模型原始 JSON 文本
      */
     protected String callModel(String message) {
+        // 模型只做填表，不做规划；完整行程必须等用户确认需求表后再生成。
         return chatClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(message)
@@ -181,6 +187,7 @@ public class RequirementExtractionAgent {
      * 从模型输出解析需求表，失败时返回规则兜底。
      */
     TravelRequirementSpec parseOrFallback(String rawResponse, TravelRequirementSpec fallback) {
+        // 大模型可能返回 ```json 包裹，先清理包装再解析。
         String cleaned = stripMarkdownFences(rawResponse);
         if (!hasText(cleaned)) {
             return fallback;
@@ -188,6 +195,7 @@ public class RequirementExtractionAgent {
         try {
             return objectMapper.readValue(cleaned, TravelRequirementSpec.class);
         } catch (Exception first) {
+            // 如果整段不是合法 JSON，尝试从多余文本里截取 JSON Object 作为第二层兜底。
             String json = extractJsonObject(cleaned);
             if (hasText(json)) {
                 try {
@@ -208,6 +216,7 @@ public class RequirementExtractionAgent {
      */
     static TravelRequirementSpec extractByRules(String sessionId, String message) {
         TravelRequirementSpec spec = new TravelRequirementSpec();
+        // 规则抽取只填用户文本里能稳定识别的信息，不主动脑补缺失字段。
         spec.setSessionId(sessionId);
         spec.setOriginalMessage(message);
         spec.setDestinations(extractDestinations(message));
@@ -223,6 +232,7 @@ public class RequirementExtractionAgent {
         spec.setTravelStyle(extractTravelStyle(message));
         spec.setAccommodationPreference(extractAccommodationPreference(message));
         spec.setTransportPreference(extractTransportPreference(message));
+        spec.setSpecialNotes(extractSpecialNotes(message));
         return spec;
     }
 
@@ -231,6 +241,7 @@ public class RequirementExtractionAgent {
         if (!hasText(message)) {
             return new ArrayList<>();
         }
+        // 目的地规则以“国家”为规范值；城市别名命中后也归并到对应国家，方便后续需求表校验。
         addIfContains(destinations, message, "法国", "法国", "法兰西", "巴黎", "尼斯", "里昂", "马赛");
         addIfContains(destinations, message, "意大利", "意大利", "罗马", "米兰", "佛罗伦萨", "威尼斯", "那不勒斯");
         addIfContains(destinations, message, "瑞士", "瑞士", "苏黎世", "日内瓦", "因特拉肯");
@@ -240,6 +251,7 @@ public class RequirementExtractionAgent {
         addIfContains(destinations, message, "奥地利", "奥地利", "维也纳", "萨尔茨堡");
         addIfContains(destinations, message, "荷兰", "荷兰", "阿姆斯特丹");
         addIfContains(destinations, message, "捷克", "捷克", "布拉格");
+        // “欧洲”太宽泛，后续校验会要求用户细化目的地；这里仍保留，避免完全丢失用户意图。
         if (destinations.isEmpty() && (message.contains("欧洲") || message.toLowerCase(Locale.ROOT).contains("europe"))) {
             destinations.add("欧洲");
         }
@@ -259,6 +271,7 @@ public class RequirementExtractionAgent {
         if (!hasText(message)) {
             return null;
         }
+        // 先识别“5晚6天”，再识别“1周”“10天”，避免把组合表达错误截成单独数字。
         Matcher nightDay = NIGHT_DAY_PATTERN.matcher(message);
         if (nightDay.find()) {
             return Integer.parseInt(nightDay.group(2));
@@ -352,6 +365,7 @@ public class RequirementExtractionAgent {
         while (matcher.find()) {
             String fullMatch = matcher.group();
             String currency = matcher.group(2);
+            // 只有带货币或预算语义的数字才认为是预算，避免把“10天”“2人”误识别为金额。
             if (hasText(currency) || fullMatch.contains("预算") || fullMatch.contains("花费")) {
                 return matcher;
             }
@@ -364,6 +378,7 @@ public class RequirementExtractionAgent {
             return null;
         }
         String text = message.toLowerCase(Locale.ROOT);
+        // 预算是否包含国际机票会显著影响后续额度和风险判断，只有用户明确说出时才设置。
         if (text.contains("不含国际机票")
                 || text.contains("不包括国际机票")
                 || text.contains("不含机票")
@@ -466,10 +481,34 @@ public class RequirementExtractionAgent {
         return null;
     }
 
+    private static String extractSpecialNotes(String message) {
+        if (!hasText(message)) {
+            return null;
+        }
+        List<String> notes = new ArrayList<>();
+        addNoteIfContains(notes, message, "带老人同行", "老人", "爸妈", "父母", "长辈");
+        addNoteIfContains(notes, message, "带孩子同行", "孩子", "小孩", "儿童", "亲子");
+        addNoteIfContains(notes, message, "每天不要太累", "不要太累", "别太累", "轻松一点", "少赶路");
+        addNoteIfContains(notes, message, "少走路", "少走路", "走路少", "不想走太多");
+        addNoteIfContains(notes, message, "不想开车", "不想开车", "不开车", "不要自驾");
+        addNoteIfContains(notes, message, "需要无障碍或低体力安排", "轮椅", "无障碍", "行动不便");
+        return notes.isEmpty() ? null : String.join("；", notes);
+    }
+
+    private static void addNoteIfContains(List<String> notes, String message, String note, String... triggers) {
+        for (String trigger : triggers) {
+            if (message.contains(trigger)) {
+                notes.add(note);
+                return;
+            }
+        }
+    }
+
     private static void mergeMissingFields(TravelRequirementSpec target, TravelRequirementSpec fallback) {
         if (target == null || fallback == null) {
             return;
         }
+        // 模型结果优先；只有模型为空或漏提时，才用规则抽取结果补齐。
         if ((target.getDestinations() == null || target.getDestinations().isEmpty())
                 && fallback.getDestinations() != null) {
             target.setDestinations(fallback.getDestinations());
@@ -510,18 +549,24 @@ public class RequirementExtractionAgent {
         if (!hasText(target.getTransportPreference())) {
             target.setTransportPreference(fallback.getTransportPreference());
         }
+        if (!hasText(target.getSpecialNotes())) {
+            target.setSpecialNotes(fallback.getSpecialNotes());
+        }
     }
 
     private static void normalize(TravelRequirementSpec spec, String sessionId, String message) {
+        // 需求表必须有稳定 ID，后续确认、生成和异步任务都会依赖它。
         if (spec.getRequirementId() == null || spec.getRequirementId().isBlank()) {
             spec.setRequirementId("req-" + UUID.randomUUID());
         }
+        // 模型可能没有回填 sessionId / originalMessage，这里用入口参数补齐。
         if (!hasText(spec.getSessionId())) {
             spec.setSessionId(sessionId);
         }
         if (!hasText(spec.getOriginalMessage())) {
             spec.setOriginalMessage(message);
         }
+        // 统一货币代码和初始状态，避免前端保存草稿时状态不一致。
         spec.setBudgetCurrency(normalizeCurrency(spec.getBudgetCurrency()));
         spec.setStatus(RequirementStatus.DRAFT);
     }
@@ -545,6 +590,7 @@ public class RequirementExtractionAgent {
             return "";
         }
         String s = raw.strip();
+        // 兼容 ```json ... ``` 和普通 ``` ... ``` 两种模型输出包装。
         if (s.startsWith("```")) {
             int newline = s.indexOf('\n');
             s = newline >= 0 ? s.substring(newline + 1).strip() : s.substring(3).strip();
@@ -568,6 +614,7 @@ public class RequirementExtractionAgent {
         if (!hasText(text)) {
             return null;
         }
+        // 中文数字只覆盖旅行天数常见表达，不做完整中文大数解析，避免引入不必要复杂度。
         String normalized = text.trim().replace("两", "二");
         if ("十".equals(normalized)) {
             return 10;

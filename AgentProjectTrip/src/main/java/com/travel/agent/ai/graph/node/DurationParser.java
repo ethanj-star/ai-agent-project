@@ -47,16 +47,19 @@ final class DurationParser {
      * 因此先读 keywords 可以最大限度保留用户原始表达。</p>
      */
     static DurationResult extract(String userQuery, String travelTime, List<String> keywords) {
+        // Gatekeeper 最常把“10天”放进 keywords，所以先读 keywords。
         DurationResult fromKeywords = extractFromKeywords(keywords);
         if (fromKeywords.present()) {
             return fromKeywords;
         }
 
+        // 有时 Gatekeeper 会误把时长放进 time；这里第二优先级读取 travelTime 做纠偏。
         DurationResult fromTime = extractFromText(travelTime);
         if (fromTime.present()) {
             return fromTime;
         }
 
+        // 最后再扫用户原文，覆盖 Gatekeeper 没有抽取到关键词的情况。
         return extractFromText(userQuery);
     }
 
@@ -87,6 +90,7 @@ final class DurationParser {
             return cleaned;
         }
         for (String keyword : keywords) {
+            // 时长已经写入 durationDays / durationText 后，就不要继续留在偏好 keywords 里干扰 Planner。
             if (hasText(keyword) && !isDurationExpression(keyword)) {
                 cleaned.add(keyword.trim());
             }
@@ -99,6 +103,7 @@ final class DurationParser {
             return DurationResult.empty();
         }
         for (String keyword : keywords) {
+            // 只取第一个明确时长表达，避免“10天 5晚6天”这类冲突输入造成状态不稳定。
             DurationResult result = extractFromText(keyword);
             if (result.present()) {
                 return result;
@@ -113,6 +118,7 @@ final class DurationParser {
         }
         String value = text.trim();
 
+        // 先匹配“5晚6天”，因为它同时包含两个数字，不能被普通“6天”规则提前截断。
         Matcher nightDayMatcher = NIGHT_DAY_PATTERN.matcher(value);
         if (nightDayMatcher.find()) {
             return new DurationResult(
@@ -162,6 +168,7 @@ final class DurationParser {
         if (!hasText(text)) {
             return null;
         }
+        // 只支持一到十九这类旅行时长常见表达；超大中文数字不是当前规划入口的目标。
         String normalized = text.trim().replace("两", "二");
         if ("十".equals(normalized)) {
             return 10;

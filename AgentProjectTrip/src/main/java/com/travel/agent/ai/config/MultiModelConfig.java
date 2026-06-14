@@ -66,8 +66,10 @@ public class MultiModelConfig {
      */
     @Bean(name = AiModelBeanNames.GATEKEEPER_CHAT_MODEL)
     public ChatModel gatekeeperChatModel(RestClient.Builder restClientBuilder) {
+        // Gatekeeper 使用 DeepSeek 兼容 OpenAI 协议端点，和核心模型共享同一套 API key/baseUrl。
         OpenAiApi api = buildOpenAiApi(deepseekBaseUrl, deepseekApiKey, restClientBuilder);
 
+        // 路由任务必须稳定输出 JSON，temperature 固定为 0，避免同一句话多次路由结果漂移。
         OpenAiChatOptions options = OpenAiChatOptions.builder()
                 .model(deepseekFlashModel)
                 .temperature(0.0)
@@ -84,6 +86,7 @@ public class MultiModelConfig {
      */
     @Bean(name = AiModelBeanNames.CORE_CHAT_MODEL)
     public ChatModel coreChatModel(RestClient.Builder restClientBuilder) {
+        // 核心规划模型承担长文本推理任务，因此 token 上限比 Gatekeeper 高得多。
         OpenAiApi api = buildOpenAiApi(deepseekBaseUrl, deepseekApiKey, restClientBuilder);
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
@@ -105,6 +108,7 @@ public class MultiModelConfig {
     @Bean(name = AiModelBeanNames.BRANCH_CHAT_MODEL)
     @Primary
     public ChatModel branchChatModel(RestClient.Builder restClientBuilder) {
+        // Branch 模型被标记为 @Primary，因此旧的 ChatClient.Builder 默认会拿到它。
         OpenAiApi api = buildOpenAiApi(bailianBaseUrl, bailianApiKey, restClientBuilder);
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
@@ -128,6 +132,7 @@ public class MultiModelConfig {
     private static OpenAiApi buildOpenAiApi(String baseUrl,
                                             String apiKey,
                                             RestClient.Builder restClientBuilder) {
+        // 所有厂商都走 OpenAI-compatible SDK，只通过 baseUrl/model/apiKey 切换真实后端。
         return OpenAiApi.builder()
                 .baseUrl(normalizeBaseUrl(baseUrl))
                 .apiKey(apiKey)
@@ -147,6 +152,7 @@ public class MultiModelConfig {
      */
     private static OpenAiChatModel buildChatModel(OpenAiApi openAiApi,
                                                   OpenAiChatOptions defaultOptions) {
+        // 显式传 NOOP ObservationRegistry，避免项目未引入 Actuator 时因为缺少观测 Bean 启动失败。
         return OpenAiChatModel.builder()
                 .openAiApi(openAiApi)
                 .defaultOptions(defaultOptions)
@@ -162,6 +168,7 @@ public class MultiModelConfig {
         if (baseUrl == null || baseUrl.isBlank()) {
             throw new IllegalArgumentException("OpenAI-compatible baseUrl must not be blank");
         }
+        // OpenAiApi Builder 会继续拼接路径；去掉末尾斜杠可以避免出现双斜杠 URL。
         return baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
     }
 }

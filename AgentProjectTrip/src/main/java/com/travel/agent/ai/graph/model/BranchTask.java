@@ -85,6 +85,7 @@ public class BranchTask {
     }
 
     public void setDestinations(List<String> destinations) {
+        // 分支任务允许没有目的地，但不允许把 null 继续传给后续节点。
         this.destinations = destinations == null ? new ArrayList<>() : destinations;
     }
 
@@ -101,6 +102,7 @@ public class BranchTask {
     }
 
     public void setConstraints(List<String> constraints) {
+        // 约束为空时代表“没有额外限制”，用空列表比 null 更适合遍历和拼 prompt。
         this.constraints = constraints == null ? new ArrayList<>() : constraints;
     }
 }

@@ -41,11 +41,13 @@ public class RequirementPatchNode {
      * @return 应用补丁后的需求表副本
      */
     public TravelRequirementSpec apply(TravelRequirementSpec current, RequirementPatch patch) {
+        // 先复制当前需求表，避免用户未确认变更前污染已生成计划绑定的原始需求。
         TravelRequirementSpec updated = copy(current);
         if (patch == null) {
             return updated;
         }
 
+        // 目的地采用追加合并，而不是直接覆盖；用户说“再加瑞士”时不能丢掉原有法国/意大利。
         if (patch.getDestinations() != null && !patch.getDestinations().isEmpty()) {
             updated.setDestinations(mergeUnique(updated.getDestinations(), patch.getDestinations()));
         }
@@ -77,6 +79,7 @@ public class RequirementPatchNode {
             updated.setTransportPreference(patch.getTransportPreference().trim());
         }
 
+        // 偏好和避开项支持增删，适合“多加美食”“不要徒步”这类局部语义。
         updated.setPreferences(applyCollectionPatch(
                 updated.getPreferences(), patch.getAddPreferences(), patch.getRemovePreferences()));
         updated.setAvoidances(applyCollectionPatch(
@@ -89,6 +92,7 @@ public class RequirementPatchNode {
         if (source == null) {
             return target;
         }
+        // 手动复制是为了保持模型对象简单，不引入深拷贝框架；集合 setter 内部会做 null-safe 处理。
         target.setRequirementId(source.getRequirementId());
         target.setSessionId(source.getSessionId());
         target.setOriginalMessage(source.getOriginalMessage());
@@ -106,6 +110,7 @@ public class RequirementPatchNode {
         target.setTravelStyle(source.getTravelStyle());
         target.setAccommodationPreference(source.getAccommodationPreference());
         target.setTransportPreference(source.getTransportPreference());
+        target.setSpecialNotes(source.getSpecialNotes());
         target.setStatus(source.getStatus());
         target.setMissingFields(source.getMissingFields());
         target.setWarnings(source.getWarnings());
@@ -116,10 +121,12 @@ public class RequirementPatchNode {
                                                      List<String> additions,
                                                      List<String> removals) {
         Set<String> values = new LinkedHashSet<>();
+        // LinkedHashSet 既去重又保留用户原来的偏好顺序。
         if (current != null) {
             values.addAll(current);
         }
         if (removals != null) {
+            // 先删后加，允许用户同一轮里“不要 X，增加 Y”。
             values.removeAll(removals);
         }
         if (additions != null) {

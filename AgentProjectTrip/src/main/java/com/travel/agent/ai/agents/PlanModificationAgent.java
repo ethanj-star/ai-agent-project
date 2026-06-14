@@ -121,17 +121,20 @@ public class PlanModificationAgent {
      * @return 结构化修改决策
      */
     public PlanModificationDecision decide(TravelPlanRecord record, String userInstruction) {
+        // 先算规则兜底：即使模型不可用，也能处理预算、天数、局部日期等高确定性修改。
         PlanModificationDecision fallback = decideByRules(userInstruction);
         if (chatClient == null || !hasText(userInstruction)) {
             return fallback;
         }
 
         try {
+            // 模型负责理解更灵活的自然语言表达；规则结果仍保留，用来补模型漏掉的确定性字段。
             String raw = callModel(record, userInstruction);
             PlanModificationDecision modelDecision = parseOrFallback(raw, fallback);
             mergeRulePatch(modelDecision, fallback);
             return modelDecision;
         } catch (Exception e) {
+            // 修改入口不能因为分类模型失败而中断，返回规则结果让后续流程继续可用。
             log.warn("[PlanModification] model call failed, use rule fallback: {}", e.getMessage());
             return fallback;
         }
@@ -141,6 +144,7 @@ public class PlanModificationAgent {
      * 调用低成本模型识别修改意图。
      */
     protected String callModel(TravelPlanRecord record, String userInstruction) {
+        // 这里只让模型做“意图分类 + 补丁抽取”，不允许它直接重写旅行计划。
         return chatClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(buildUserPrompt(record, userInstruction))
@@ -152,6 +156,7 @@ public class PlanModificationAgent {
      * 解析模型输出，失败时返回规则兜底。
      */
     PlanModificationDecision parseOrFallback(String raw, PlanModificationDecision fallback) {
+        // 模型有时会包 Markdown 代码块，先清理再交给 Jackson。
         String cleaned = stripMarkdownFences(raw);
         if (!hasText(cleaned)) {
             return fallback;
@@ -159,6 +164,7 @@ public class PlanModificationAgent {
         try {
             return objectMapper.readValue(cleaned, PlanModificationDecision.class);
         } catch (Exception first) {
+            // 如果整段解析失败，尝试从文本中截取第一个 JSON Object；这是对模型多说废话的第二层兜底。
             String json = extractJsonObject(cleaned);
             if (hasText(json)) {
                 try {
@@ -180,18 +186,21 @@ public class PlanModificationAgent {
         PlanModificationDecision decision = new PlanModificationDecision();
         decision.setInstructionSummary(defaultText(instruction, "用户提出了计划修改请求。"));
 
+        // 空指令不能猜测修改目标，必须追问用户。
         if (!hasText(instruction)) {
             decision.setIntent(PlanModificationIntent.CLARIFICATION);
             decision.setClarificationQuestion("你想修改哪一天或哪一部分行程？");
             return decision;
         }
 
+        // “谢谢”“先看看”这类反馈不应触发重写或重新生成。
         if (looksLikeDirectComment(instruction)) {
             decision.setIntent(PlanModificationIntent.DIRECT_COMMENT);
             decision.setInstructionSummary("用户只是反馈或暂时查看，不需要修改计划。");
             return decision;
         }
 
+        // 预算、天数、目的地、人数等属于核心需求变更，需要回到需求表确认，而不是直接局部改草稿。
         RequirementPatch patch = extractRequirementPatch(instruction);
         if (hasRequirementChange(instruction, patch)) {
             decision.setIntent(PlanModificationIntent.REQUIREMENT_CHANGE);
@@ -201,6 +210,7 @@ public class PlanModificationAgent {
             return decision;
         }
 
+        // 明确提到某一天、节奏、删减景点等，通常可以在当前计划文本上做局部重写。
         if (looksLikeLocalRevision(instruction)) {
             decision.setIntent(PlanModificationIntent.LOCAL_REVISION);
             decision.setTargetDay(extractTargetDay(instruction));
@@ -209,6 +219,7 @@ public class PlanModificationAgent {
             return decision;
         }
 
+        // 指令过短或太泛时，直接改计划很容易误解用户意图，先追问。
         if (looksTooVague(instruction)) {
             decision.setIntent(PlanModificationIntent.CLARIFICATION);
             decision.setClarificationQuestion("你是想修改某一天的安排，还是想调整预算、目的地、住宿等核心需求？");
@@ -227,6 +238,7 @@ public class PlanModificationAgent {
             return patch;
         }
 
+        // 预算正则可能命中普通数字；只有出现预算语义或货币单位时才采纳，避免误把“第3天”当预算。
         Matcher budget = BUDGET_PATTERN.matcher(instruction);
         while (budget.find()) {
             if (instruction.contains("预算") || instruction.contains("花费") || hasText(budget.group(2))) {
@@ -236,6 +248,7 @@ public class PlanModificationAgent {
             }
         }
 
+        // 天数、人数字段只在用户出现“改成/天数/人数”等修改语义时采纳。
         Matcher duration = DURATION_PATTERN.matcher(instruction);
         if ((instruction.contains("天数") || instruction.contains("行程") || instruction.contains("改成")
                 || instruction.contains("改为")) && duration.find()) {
@@ -400,6 +413,7 @@ public class PlanModificationAgent {
         if (target == null || fallback == null) {
             return;
         }
+        // 模型输出可能缺字段；规则结果是确定性较强的保底信息，用它补空，不覆盖模型明确判断。
         if (target.getIntent() == null || target.getIntent() == PlanModificationIntent.UNSUPPORTED) {
             target.setIntent(fallback.getIntent());
         }
@@ -430,6 +444,7 @@ public class PlanModificationAgent {
     }
 
     private static String buildUserPrompt(TravelPlanRecord record, String userInstruction) {
+        // 只截取当前计划摘要的一小段给分类模型，避免把完整长行程塞进低成本路由任务。
         TravelPlanVersion current = record == null ? null : record.current().orElse(null);
         String currentAnswer = current == null ? "无当前计划文本。" : defaultText(current.getFinalAnswer(), "无当前计划文本。");
         return """

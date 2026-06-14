@@ -53,6 +53,7 @@ public class RiskAssessment {
      * 创建一个无风险审查结果。
      */
     public static RiskAssessment clear() {
+        // clear 表示审查通过：不需要追问、不需要修正，也没有风险条目。
         return new RiskAssessment(false, false, new ArrayList<>(), null);
     }
 
@@ -77,6 +78,7 @@ public class RiskAssessment {
     }
 
     public void setIssues(List<RiskIssue> issues) {
+        // 风险列表保持非 null，最终答案拼风险提醒时可以直接遍历。
         this.issues = issues == null ? new ArrayList<>() : issues;
     }
 

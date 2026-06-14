@@ -47,6 +47,7 @@ public class WeatherTools {
      */
     @Tool(description = "根据城市名称查询实时天气。注意：传入的参数必须是该城市的英文名称（例如：'Paris' 而非 '巴黎', 'London' 而非 '伦敦'）。")
     public WeatherDTO getWeather(String city) {
+        // 当前天气工具只查实时天气；未来日期天气不要在这里硬算，交给 Planner 做季节性提醒。
         return weatherService.getWeatherByCity(city);
     }
 }

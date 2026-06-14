@@ -80,6 +80,7 @@ public class RiskIssue {
                                           String message,
                                           String evidence,
                                           String suggestedAction) {
+        // 可自动修正的问题会触发 PlanRevisionNode，不需要先打断用户对话。
         return new RiskIssue(type, severity, code, null, message, evidence, suggestedAction, true, false);
     }
 
@@ -91,6 +92,7 @@ public class RiskIssue {
                                     String code,
                                     String message,
                                     String evidence) {
+        // warning 只进入最终提醒，不触发自动重写，也不阻塞输出。
         return new RiskIssue(type, severity, code, null, message, evidence, null, false, false);
     }
 

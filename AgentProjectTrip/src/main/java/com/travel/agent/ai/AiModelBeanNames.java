@@ -25,5 +25,6 @@ public final class AiModelBeanNames {
     public static final String BRANCH_CHAT_MODEL = "branchChatModel";
 
     private AiModelBeanNames() {
+        // 常量类不允许实例化；所有使用方通过类名直接引用这些 Bean 名称。
     }
 }
