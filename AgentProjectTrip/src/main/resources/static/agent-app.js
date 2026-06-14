@@ -59,7 +59,8 @@ const state = {
   errorMessage: "",
   lastAssistantMessage: "",
   lastRawResponse: null,
-  pollingTimer: null
+  pollingTimer: null,
+  jobClockTimer: null
 };
 
 const els = {};
@@ -243,12 +244,37 @@ function startJobPolling() {
   loadJobStatus(false);
   // 轮询只在 PENDING/RUNNING 时存在；终态会在 loadJobStatus 中主动停止，避免页面后台持续请求。
   state.pollingTimer = window.setInterval(() => loadJobStatus(false), 2500);
+  startJobClock();
 }
 
 function stopJobPolling() {
   if (state.pollingTimer) {
     window.clearInterval(state.pollingTimer);
     state.pollingTimer = null;
+  }
+  stopJobClock();
+}
+
+function startJobClock() {
+  stopJobClock();
+  if (!isJobActive(state.jobStatus)) {
+    return;
+  }
+  // 后端只在阶段推进或轮询响应时更新 durationSeconds；本地时钟负责让“已运行”每秒跳动。
+  state.jobClockTimer = window.setInterval(() => {
+    if (!isJobActive(state.jobStatus)) {
+      stopJobClock();
+      return;
+    }
+    renderJobProgress();
+    renderDebug();
+  }, 1000);
+}
+
+function stopJobClock() {
+  if (state.jobClockTimer) {
+    window.clearInterval(state.jobClockTimer);
+    state.jobClockTimer = null;
   }
 }
 
@@ -775,10 +801,11 @@ function renderJobMeta(detail) {
     return "暂无生成任务。";
   }
   const jobPlanId = detail.planId || detail.result?.planId;
+  const durationSeconds = currentJobDurationSeconds(detail);
   const parts = [
     `任务 ${escapeHtml(shortId(state.jobId))}`,
     jobPlanId ? `方案 ${escapeHtml(shortId(jobPlanId))}` : "",
-    `已运行 ${escapeHtml(formatDuration(detail.durationSeconds))}`,
+    `已运行 ${escapeHtml(formatDuration(durationSeconds))}`,
     state.jobUpdatedAt ? `更新 ${escapeHtml(formatJobTime(state.jobUpdatedAt))}` : ""
   ].filter(Boolean);
   return parts.map((part) => `<span>${part}</span>`).join("");
@@ -794,7 +821,7 @@ function renderJobTimeline() {
   els.jobTimeline.innerHTML = STAGE_SEQUENCE.map((item, index) => {
     const done = terminal && state.jobStatus === "SUCCEEDED"
       ? true
-      : index < currentIndex;
+      : !terminal && index < currentIndex;
     const active = !terminal && index === currentIndex;
     const failed = terminal && state.jobStatus === "FAILED" && item.key === "FINISHED";
     const className = ["job-step", done ? "done" : "", active ? "active" : "", failed ? "failed" : ""]
@@ -1034,7 +1061,8 @@ function resetFlow() {
     errorMessage: "",
     lastAssistantMessage: "",
     lastRawResponse: null,
-    pollingTimer: null
+    pollingTimer: null,
+    jobClockTimer: null
   });
   els.messageInput.value = "";
   els.requirementForm.reset();
@@ -1098,6 +1126,7 @@ function restoreState() {
     const snapshot = JSON.parse(raw);
     Object.assign(state, snapshot, {
       pollingTimer: null,
+      jobClockTimer: null,
       loading: false,
       loadingLabel: ""
     });
@@ -1181,6 +1210,29 @@ function formatDuration(seconds) {
     return `${rest} 秒`;
   }
   return rest ? `${minutes} 分 ${rest} 秒` : `${minutes} 分`;
+}
+
+function currentJobDurationSeconds(detail = {}) {
+  const serverDuration = Number(detail.durationSeconds);
+  const fallback = Number.isFinite(serverDuration) ? serverDuration : 0;
+  const startedAt = state.jobStartedAt || detail.createdAt;
+  if (!startedAt) {
+    return fallback;
+  }
+  if (isJobActive(state.jobStatus)) {
+    return elapsedSeconds(startedAt, new Date(), fallback);
+  }
+  const endedAt = state.jobFinishedAt || detail.finishedAt || state.jobUpdatedAt || detail.updatedAt;
+  return endedAt ? elapsedSeconds(startedAt, endedAt, fallback) : fallback;
+}
+
+function elapsedSeconds(startValue, endValue, fallback = 0) {
+  const start = new Date(startValue);
+  const end = endValue instanceof Date ? endValue : new Date(endValue);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return fallback;
+  }
+  return Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000));
 }
 
 function formatJobTime(value) {
