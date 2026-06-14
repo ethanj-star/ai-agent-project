@@ -1,6 +1,7 @@
 package com.travel.agent.ai.graph;
 
 import com.travel.agent.ai.dto.GatekeeperResponse;
+import com.travel.agent.ai.graph.model.BranchDispatchDecision;
 import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.GraphResult;
 import com.travel.agent.ai.graph.model.RiskAssessment;
@@ -11,11 +12,13 @@ import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.ValidationIssue;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
 import com.travel.agent.ai.graph.node.BranchDispatchNode;
+import com.travel.agent.ai.graph.node.BranchDispatchGuardNode;
 import com.travel.agent.ai.graph.node.BranchExecuteNode;
 import com.travel.agent.ai.graph.node.ClarifyQuestionNode;
 import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
 import com.travel.agent.ai.graph.node.MergeClarificationNode;
+import com.travel.agent.ai.graph.node.ModelBranchDispatchNode;
 import com.travel.agent.ai.graph.node.PlanDraftNode;
 import com.travel.agent.ai.graph.node.PlanRevisionNode;
 import com.travel.agent.ai.graph.node.PreClarifyCheckNode;
@@ -265,6 +268,66 @@ class LangGraphPlannerFacadeTest {
         order.verify(plan).plan(state);
         order.verify(validate).validate(state);
         order.verify(finalize).finish(state);
+    }
+
+    /**
+     * 验证第十三阶段新节点注入后，Facade 会优先走模型派发和 Guard，而不是直接走旧规则派发。
+     */
+    @Test
+    void planUsesModelBranchDispatchWhenAvailable() {
+        InitStateNode init = mock(InitStateNode.class);
+        RetrieveKnowledgeNode retrieve = mock(RetrieveKnowledgeNode.class);
+        BranchDispatchNode branchDispatch = mock(BranchDispatchNode.class);
+        ModelBranchDispatchNode modelDispatch = mock(ModelBranchDispatchNode.class);
+        BranchDispatchGuardNode guard = mock(BranchDispatchGuardNode.class);
+        BranchExecuteNode branchExecute = mock(BranchExecuteNode.class);
+        PlanDraftNode plan = mock(PlanDraftNode.class);
+        ValidateDraftNode validate = mock(ValidateDraftNode.class);
+        FinalizeAnswerNode finalize = mock(FinalizeAnswerNode.class);
+        PreClarifyCheckNode precheck = mock(PreClarifyCheckNode.class);
+        InMemoryConversationStateStore store = new InMemoryConversationStateStore();
+
+        GraphInputRequest request = new GraphInputRequest();
+        request.setSessionId("model-dispatch-s1");
+        TravelPlanState state = new TravelPlanState();
+        TravelPlanState finalState = new TravelPlanState();
+        finalState.setSuccess(true);
+        finalState.setFinalAnswer("model dispatch final answer");
+        finalState.setValidationIssues(List.of());
+        BranchDispatchDecision decision = new BranchDispatchDecision();
+
+        when(init.init(request)).thenReturn(state);
+        when(precheck.check(state)).thenReturn(state);
+        when(retrieve.retrieve(state)).thenReturn(state);
+        when(modelDispatch.dispatch(state)).thenReturn(decision);
+        when(guard.guard(state, decision)).thenReturn(state);
+        when(branchExecute.execute(state)).thenReturn(state);
+        when(plan.plan(state)).thenReturn(state);
+        when(validate.validate(state)).thenReturn(state);
+        when(finalize.finish(state)).thenReturn(finalState);
+
+        LangGraphPlannerFacade facade = new LangGraphPlannerFacade(
+                init,
+                retrieve,
+                branchDispatch,
+                branchExecute,
+                plan,
+                validate,
+                new ClarifyQuestionNode(),
+                new MergeClarificationNode(),
+                precheck,
+                finalize,
+                store);
+        facade.setModelBranchDispatchNode(modelDispatch);
+        facade.setBranchDispatchGuardNode(guard);
+
+        GraphResult result = facade.plan(request);
+
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getAnswer()).isEqualTo("model dispatch final answer");
+        verify(modelDispatch).dispatch(state);
+        verify(guard).guard(state, decision);
+        verify(branchDispatch, never()).dispatch(any());
     }
 
     /**

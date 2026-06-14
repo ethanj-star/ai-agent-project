@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 核心 Graph 分发给分支 Agent 的结构化任务。
  *
- * <p>系统架构位置：BranchDispatchNode -> <b>BranchTask</b> -> BranchExecuteNode</p>
+ * <p>系统架构位置：BranchDispatchNode / BranchDispatchGuardNode -> <b>BranchTask</b> -> BranchExecuteNode</p>
  *
  * <p>职责：
  * <ul>
@@ -52,6 +52,12 @@ public class BranchTask {
     /** 预算是否包含国际机票；Planner 用它决定航班价格是否进入预算。 */
     private Boolean budgetIncludesInternationalFlight;
 
+    /** 第十三阶段模型或规则派发该任务的原因，供日志、Trace 和后续调试使用。 */
+    private String dispatchReason;
+
+    /** 第十三阶段模型给出的任务优先级，第一版只作为 Guard 排序参考。 */
+    private String dispatchPriority;
+
     /** 用户偏好、预算、避开人流等补充约束。 */
     private List<String> constraints = new ArrayList<>();
 
@@ -92,6 +98,34 @@ public class BranchTask {
         this.departureCity = cleanText(departureCity);
         this.accommodationPreference = cleanText(accommodationPreference);
         this.budgetIncludesInternationalFlight = budgetIncludesInternationalFlight;
+    }
+
+    public BranchTask(String taskId,
+                      BranchTaskType type,
+                      String query,
+                      List<String> destinations,
+                      String travelTime,
+                      List<String> constraints,
+                      LocalDate startDate,
+                      Integer durationDays,
+                      String departureCity,
+                      String accommodationPreference,
+                      Boolean budgetIncludesInternationalFlight,
+                      String dispatchReason,
+                      String dispatchPriority) {
+        this(taskId,
+                type,
+                query,
+                destinations,
+                travelTime,
+                constraints,
+                startDate,
+                durationDays,
+                departureCity,
+                accommodationPreference,
+                budgetIncludesInternationalFlight);
+        this.dispatchReason = cleanText(dispatchReason);
+        this.dispatchPriority = cleanText(dispatchPriority);
     }
 
     public String getTaskId() {
@@ -173,6 +207,22 @@ public class BranchTask {
 
     public void setBudgetIncludesInternationalFlight(Boolean budgetIncludesInternationalFlight) {
         this.budgetIncludesInternationalFlight = budgetIncludesInternationalFlight;
+    }
+
+    public String getDispatchReason() {
+        return dispatchReason;
+    }
+
+    public void setDispatchReason(String dispatchReason) {
+        this.dispatchReason = cleanText(dispatchReason);
+    }
+
+    public String getDispatchPriority() {
+        return dispatchPriority;
+    }
+
+    public void setDispatchPriority(String dispatchPriority) {
+        this.dispatchPriority = cleanText(dispatchPriority);
     }
 
     public List<String> getConstraints() {

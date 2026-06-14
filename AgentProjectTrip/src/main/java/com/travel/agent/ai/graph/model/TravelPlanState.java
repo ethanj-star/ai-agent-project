@@ -13,7 +13,7 @@ import java.util.List;
  * <p>职责：
  * <ul>
  *   <li>贯穿 Init、RAG、Branch、Planner、Validator、RiskReasoning、Revision、Finalizer 全部节点。</li>
- *   <li>保存用户输入、Gatekeeper 实体、结构化需求表、行程时长、RAG 上下文、规划草案、风险审查、校验问题和最终答案。</li>
+ *   <li>保存用户输入、Gatekeeper 实体、结构化需求表、行程时长、RAG 上下文、分支派发决策、规划草案、风险审查、校验问题和最终答案。</li>
  *   <li>为第二阶段迁移到 LangGraph4j StateGraph 提供稳定的状态模型。</li>
  * </ul>
  * </p>
@@ -84,6 +84,12 @@ public class TravelPlanState {
 
     /** 第三阶段由 BranchDispatchNode 生成的分支任务列表。 */
     private List<BranchTask> branchTasks = new ArrayList<>();
+
+    /** 第十三阶段模型对分支任务的原始建议；模型失败时会记录 fallback 原因。 */
+    private BranchDispatchDecision branchDispatchDecision;
+
+    /** 第十三阶段 Java Guard 对模型建议的接受、拒绝、裁剪或回退记录。 */
+    private List<BranchDispatchIssue> branchDispatchIssues = new ArrayList<>();
 
     /** 第三阶段由 BranchExecuteNode 写入的分支执行结果。 */
     private List<BranchResult> branchResults = new ArrayList<>();
@@ -273,6 +279,23 @@ public class TravelPlanState {
     public void setBranchTasks(List<BranchTask> branchTasks) {
         // BranchDispatchNode 不需要分支时写空列表，BranchExecuteNode 会据此直接跳过。
         this.branchTasks = branchTasks == null ? new ArrayList<>() : branchTasks;
+    }
+
+    public BranchDispatchDecision getBranchDispatchDecision() {
+        return branchDispatchDecision;
+    }
+
+    public void setBranchDispatchDecision(BranchDispatchDecision branchDispatchDecision) {
+        this.branchDispatchDecision = branchDispatchDecision;
+    }
+
+    public List<BranchDispatchIssue> getBranchDispatchIssues() {
+        return branchDispatchIssues;
+    }
+
+    public void setBranchDispatchIssues(List<BranchDispatchIssue> branchDispatchIssues) {
+        // Guard 没有拒绝任何任务时写空列表，后续 Trace 面板可以直接遍历。
+        this.branchDispatchIssues = branchDispatchIssues == null ? new ArrayList<>() : branchDispatchIssues;
     }
 
     public List<BranchResult> getBranchResults() {

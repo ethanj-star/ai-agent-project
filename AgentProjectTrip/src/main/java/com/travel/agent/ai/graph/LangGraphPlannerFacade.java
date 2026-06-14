@@ -2,16 +2,19 @@ package com.travel.agent.ai.graph;
 
 import com.travel.agent.ai.graph.model.GraphInputRequest;
 import com.travel.agent.ai.graph.model.GraphResult;
+import com.travel.agent.ai.graph.model.BranchDispatchDecision;
 import com.travel.agent.ai.graph.model.RiskIssue;
 import com.travel.agent.ai.graph.model.TravelPlanState;
 import com.travel.agent.ai.graph.model.ValidationIssue;
 import com.travel.agent.ai.graph.model.WorkflowStatus;
 import com.travel.agent.ai.graph.node.BranchDispatchNode;
+import com.travel.agent.ai.graph.node.BranchDispatchGuardNode;
 import com.travel.agent.ai.graph.node.BranchExecuteNode;
 import com.travel.agent.ai.graph.node.ClarifyQuestionNode;
 import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
 import com.travel.agent.ai.graph.node.MergeClarificationNode;
+import com.travel.agent.ai.graph.node.ModelBranchDispatchNode;
 import com.travel.agent.ai.graph.node.PlanDraftNode;
 import com.travel.agent.ai.graph.node.PlanRevisionNode;
 import com.travel.agent.ai.graph.node.PreClarifyCheckNode;
@@ -40,6 +43,7 @@ import java.util.List;
  *   <li>串联 Init、RAG、Branch、Planner、Validator、Clarify、Finalizer 等节点。</li>
  *   <li>在第二阶段支持“信息不足 -> 追问用户 -> 保存 pending 状态 -> 用户补充后续跑”的闭环。</li>
  *   <li>在第三阶段支持“核心 Graph 派发分支任务 -> 分支 Agent 调工具 -> 结果回填 Planner”的直线闭环。</li>
+ *   <li>在第十三阶段支持“核心模型建议分支任务 -> Java Guard 校验 -> 分支 Agent 执行”的模型派发闭环。</li>
  *   <li>在第四阶段支持“Planner -> RiskReasoning -> Revision -> Finalizer”的自动修正闭环。</li>
  *   <li>统一捕获节点异常，返回 {@link GraphResult} 降级结果，避免 Graph 内部异常穿透到 Web 层。</li>
  * </ul>
@@ -65,6 +69,12 @@ public class LangGraphPlannerFacade {
 
     /** 根据状态生成天气、景点、航班等分支任务的节点。 */
     private final BranchDispatchNode branchDispatchNode;
+
+    /** 第十三阶段模型分支派发节点；测试构造器可为空，生产环境由 Spring setter 注入。 */
+    private ModelBranchDispatchNode modelBranchDispatchNode;
+
+    /** 第十三阶段分支派发安全守卫；测试构造器可为空，生产环境由 Spring setter 注入。 */
+    private BranchDispatchGuardNode branchDispatchGuardNode;
 
     /** 调用分支 Agent 执行任务并回填分支结果的节点。 */
     private final BranchExecuteNode branchExecuteNode;
@@ -144,6 +154,32 @@ public class LangGraphPlannerFacade {
     @Autowired(required = false)
     public void setUserMemoryService(UserMemoryService userMemoryService) {
         this.userMemoryService = userMemoryService;
+    }
+
+    /**
+     * 注入第十三阶段模型派发节点。
+     *
+     * <p>使用可选 setter 是为了保持前几个阶段的测试构造器稳定。
+     * 未注入时，Graph 会继续使用旧的 {@link BranchDispatchNode} 规则派发。</p>
+     *
+     * @param modelBranchDispatchNode DeepSeek Pro 分支任务建议节点
+     */
+    @Autowired(required = false)
+    public void setModelBranchDispatchNode(ModelBranchDispatchNode modelBranchDispatchNode) {
+        this.modelBranchDispatchNode = modelBranchDispatchNode;
+    }
+
+    /**
+     * 注入第十三阶段 Java Guard。
+     *
+     * <p>Guard 是模型派发的安全边界；未注入时，Facade 不会使用模型建议，
+     * 而是回退第三阶段的规则派发流程。</p>
+     *
+     * @param branchDispatchGuardNode 模型建议校验节点
+     */
+    @Autowired(required = false)
+    public void setBranchDispatchGuardNode(BranchDispatchGuardNode branchDispatchGuardNode) {
+        this.branchDispatchGuardNode = branchDispatchGuardNode;
     }
 
     /**
@@ -358,19 +394,29 @@ public class LangGraphPlannerFacade {
     }
 
     /**
-     * 执行第三阶段分支任务流。
+     * 执行分支任务流。
      *
-     * <p>生产环境由 Spring 注入真实 BranchDispatchNode / BranchExecuteNode；
-     * 包内兼容测试构造器不会注入这两个节点，此时保持第一、二阶段旧测试路径不变。</p>
+     * <p>第十三阶段优先使用“ModelBranchDispatchNode -> BranchDispatchGuardNode”的模型派发链路；
+     * 如果新节点未注入，继续使用第三阶段旧的 BranchDispatchNode 规则派发。
+     * 包内兼容测试构造器不会注入这些节点，此时保持第一、二阶段旧测试路径不变。</p>
      */
     private TravelPlanState runBranchWorkflow(TravelPlanState state) {
-        // 兼容旧测试构造器：旧测试没有注入分支节点时，直接跳过分支流程。
-        if (branchDispatchNode == null || branchExecuteNode == null) {
+        // 兼容旧测试构造器：旧测试没有注入执行节点时，直接跳过分支流程。
+        if (branchExecuteNode == null) {
             return state;
         }
 
-        // Dispatch 只负责“决定要做哪些分支任务”，例如天气、景点、航班。
-        TravelPlanState dispatchedState = branchDispatchNode.dispatch(state);
+        TravelPlanState dispatchedState;
+        if (modelBranchDispatchNode != null && branchDispatchGuardNode != null) {
+            // 第十三阶段：模型负责建议，Guard 负责边界。模型失败时 Guard 会回退旧规则派发。
+            BranchDispatchDecision decision = modelBranchDispatchNode.dispatch(state);
+            dispatchedState = branchDispatchGuardNode.guard(state, decision);
+        } else if (branchDispatchNode != null) {
+            // 第三阶段兜底：没有模型派发节点时，继续使用确定性 Java 规则派发。
+            dispatchedState = branchDispatchNode.dispatch(state);
+        } else {
+            return state;
+        }
 
         // Execute 才真正调用 BranchAgentFacade / Tools，并把结果写回 state。
         return branchExecuteNode.execute(dispatchedState);

@@ -90,11 +90,23 @@ public class BranchDispatchNode {
                 state.getDurationDays(),
                 spec == null ? null : spec.getDepartureCity(),
                 spec == null ? null : spec.getAccommodationPreference(),
-                spec == null ? null : spec.getBudgetIncludesInternationalFlight());
+                spec == null ? null : spec.getBudgetIncludesInternationalFlight(),
+                ruleReason(type),
+                "MEDIUM");
     }
 
     private static boolean hasDestinations(TravelPlanState state) {
         return state.getDestinations() != null && !state.getDestinations().isEmpty();
+    }
+
+    private static String ruleReason(BranchTaskType type) {
+        return switch (type) {
+            case KNOWLEDGE -> "规则派发：有目的地，需要补充攻略、防坑和背景知识。";
+            case WEATHER -> "规则派发：用户明确提到当前/实时天气。";
+            case PLACES -> "规则派发：用户需要行程、景点、攻略或避峰游玩线索。";
+            case HOTEL -> "规则派发：用户提到住宿，或需求表具备日期、天数和预算，可查询住宿参考。";
+            case FLIGHT -> "规则派发：用户明确需要航班，或需求表具备出发地、日期和目的地。";
+        };
     }
 
     private static boolean looksLikePlacesNeed(TravelPlanState state) {

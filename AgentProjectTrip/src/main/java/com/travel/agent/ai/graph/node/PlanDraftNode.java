@@ -2,6 +2,7 @@ package com.travel.agent.ai.graph.node;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.travel.agent.ai.AiModelBeanNames;
+import com.travel.agent.ai.graph.model.BranchDispatchIssue;
 import com.travel.agent.ai.graph.model.BranchResult;
 import com.travel.agent.ai.graph.model.PlannerDraft;
 import com.travel.agent.ai.graph.model.TravelPlanState;
@@ -157,6 +158,7 @@ public class PlanDraftNode {
         String ragContext = hasText(state.getRagContext())
                 ? state.getRagContext()
                 : "私有知识库暂无可用上下文。";
+        String branchDispatchContext = formatBranchDispatchIssues(state.getBranchDispatchIssues());
         String branchContext = formatBranchResults(state.getBranchResults());
         String requirementContext = formatRequirementSpec(state.getRequirementSpec());
         String memoryContext = hasText(state.getUserMemoryContext())
@@ -195,6 +197,9 @@ public class PlanDraftNode {
                 RAG 上下文：
                 %s
 
+                分支派发记录：
+                %s
+
                 分支 Agent 结果：
                 %s
 
@@ -217,6 +222,7 @@ public class PlanDraftNode {
                 duration,
                 keywords,
                 ragContext,
+                branchDispatchContext,
                 branchContext
         );
     }
@@ -310,6 +316,29 @@ public class PlanDraftNode {
 
         String text = builder.toString().strip();
         return hasText(text) ? text : "暂无分支 Agent 结果。";
+    }
+
+    /**
+     * 将第十三阶段模型派发和 Java Guard 的处理记录压缩成 Planner 可读文本。
+     *
+     * <p>这些记录不是工具事实，而是“为什么某些工具没有执行”的解释。
+     * Planner 可以据此提醒用户某些实时能力暂未接入，但不能把被拒绝的任务当作真实工具结果。</p>
+     */
+    private static String formatBranchDispatchIssues(List<BranchDispatchIssue> issues) {
+        if (issues == null || issues.isEmpty()) {
+            return "无。";
+        }
+        List<String> lines = new ArrayList<>();
+        for (BranchDispatchIssue issue : issues) {
+            if (issue == null) {
+                continue;
+            }
+            lines.add("- " + defaultText(issue.getAction(), "UNKNOWN")
+                    + " " + defaultText(issue.getType(), "UNKNOWN")
+                    + "："
+                    + defaultText(issue.getReason(), "无说明"));
+        }
+        return lines.isEmpty() ? "无。" : String.join("\n", lines);
     }
 
     /**
