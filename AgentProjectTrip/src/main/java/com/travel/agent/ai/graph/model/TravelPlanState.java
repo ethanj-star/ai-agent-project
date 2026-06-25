@@ -46,8 +46,17 @@ public class TravelPlanState {
     /** 用户偏好、约束和其他关键词，如预算、避开人多等；行程天数会单独写入 duration 字段。 */
     private List<String> keywords = new ArrayList<>();
 
-    /** 私有知识库检索出的攻略、防坑和 POI 上下文 */
+    /** 私有知识库检索出的攻略、防坑和 POI 上下文。 */
     private String ragContext;
+
+    /** 第十四阶段 Adaptive RAG 的查询类型、策略、数据源和 planned query 决策。 */
+    private AdaptiveRagDecision adaptiveRagDecision;
+
+    /** 第十四阶段 Adaptive RAG 的实际检索结果，供调试面板和后续 Eval 使用。 */
+    private RagRetrievalResult ragRetrievalResult;
+
+    /** 面向日志和前端的 RAG trace 摘要，帮助初学者理解本次知识库是怎么查的。 */
+    private String ragTraceSummary;
 
     /** Planner 节点生成的第一版结构化规划草案 */
     private PlannerDraft draft;
@@ -178,6 +187,30 @@ public class TravelPlanState {
 
     public void setRagContext(String ragContext) {
         this.ragContext = ragContext;
+    }
+
+    public AdaptiveRagDecision getAdaptiveRagDecision() {
+        return adaptiveRagDecision;
+    }
+
+    public void setAdaptiveRagDecision(AdaptiveRagDecision adaptiveRagDecision) {
+        this.adaptiveRagDecision = adaptiveRagDecision;
+    }
+
+    public RagRetrievalResult getRagRetrievalResult() {
+        return ragRetrievalResult;
+    }
+
+    public void setRagRetrievalResult(RagRetrievalResult ragRetrievalResult) {
+        this.ragRetrievalResult = ragRetrievalResult;
+    }
+
+    public String getRagTraceSummary() {
+        return ragTraceSummary;
+    }
+
+    public void setRagTraceSummary(String ragTraceSummary) {
+        this.ragTraceSummary = ragTraceSummary;
     }
 
     public PlannerDraft getDraft() {
