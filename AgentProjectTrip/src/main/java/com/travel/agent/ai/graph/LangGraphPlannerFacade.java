@@ -11,6 +11,7 @@ import com.travel.agent.ai.graph.node.BranchDispatchNode;
 import com.travel.agent.ai.graph.node.BranchDispatchGuardNode;
 import com.travel.agent.ai.graph.node.BranchExecuteNode;
 import com.travel.agent.ai.graph.node.ClarifyQuestionNode;
+import com.travel.agent.ai.graph.node.AdaptiveRagNode;
 import com.travel.agent.ai.graph.node.FinalizeAnswerNode;
 import com.travel.agent.ai.graph.node.InitStateNode;
 import com.travel.agent.ai.graph.node.MergeClarificationNode;
@@ -64,8 +65,11 @@ public class LangGraphPlannerFacade {
     /** 初始化 TravelPlanState 的入口节点。 */
     private final InitStateNode initStateNode;
 
-    /** 从私有知识库检索 RAG 上下文的节点。 */
+    /** 从私有知识库检索 RAG 上下文的旧节点；第十四阶段之后作为 fallback 保留。 */
     private final RetrieveKnowledgeNode retrieveKnowledgeNode;
+
+    /** 第十四阶段 Adaptive RAG 节点；测试构造器可为空，生产环境由 Spring setter 注入。 */
+    private AdaptiveRagNode adaptiveRagNode;
 
     /** 根据状态生成天气、景点、航班等分支任务的节点。 */
     private final BranchDispatchNode branchDispatchNode;
@@ -180,6 +184,19 @@ public class LangGraphPlannerFacade {
     @Autowired(required = false)
     public void setBranchDispatchGuardNode(BranchDispatchGuardNode branchDispatchGuardNode) {
         this.branchDispatchGuardNode = branchDispatchGuardNode;
+    }
+
+    /**
+     * 注入第十四阶段 Adaptive RAG 节点。
+     *
+     * <p>使用可选 setter 是为了保持旧单元测试构造器稳定。未注入时，Graph 会继续使用
+     * {@link RetrieveKnowledgeNode} 的固定检索流程。</p>
+     *
+     * @param adaptiveRagNode 自适应 RAG 检索节点
+     */
+    @Autowired(required = false)
+    public void setAdaptiveRagNode(AdaptiveRagNode adaptiveRagNode) {
+        this.adaptiveRagNode = adaptiveRagNode;
     }
 
     /**
@@ -304,7 +321,9 @@ public class LangGraphPlannerFacade {
             }
 
             // Step 4：信息足够后，先从知识库检索旅行攻略、防坑信息等 RAG 上下文。
-            state = retrieveKnowledgeNode.retrieve(state);
+            // 第十四阶段优先使用 AdaptiveRagNode，根据问题类型选择不同检索策略；
+            // 未注入或失败时保留旧 RetrieveKnowledgeNode，避免知识库增强影响主流程稳定性。
+            state = runRagWorkflow(state);
 
             // Step 5：派发并执行分支 Agent 任务，例如天气、景点、航班、知识库补充等。
             // 分支结果会写回 state，供后面的 Planner 使用。
@@ -420,6 +439,20 @@ public class LangGraphPlannerFacade {
 
         // Execute 才真正调用 BranchAgentFacade / Tools，并把结果写回 state。
         return branchExecuteNode.execute(dispatchedState);
+    }
+
+    /**
+     * 执行 RAG 检索阶段。
+     *
+     * <p>第十四阶段优先使用 Adaptive RAG。旧 RetrieveKnowledgeNode 仍保留为 fallback，
+     * 因为当前 MediaCrawler 知识运营、metadata filter 和 reranker 还在 TODO 队列中，
+     * 主规划流程不能依赖新 RAG 一次性完全稳定。</p>
+     */
+    private TravelPlanState runRagWorkflow(TravelPlanState state) {
+        if (adaptiveRagNode != null) {
+            return adaptiveRagNode.retrieve(state);
+        }
+        return retrieveKnowledgeNode.retrieve(state);
     }
 
     /**

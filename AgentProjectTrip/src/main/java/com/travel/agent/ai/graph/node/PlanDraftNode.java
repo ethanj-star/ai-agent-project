@@ -158,6 +158,9 @@ public class PlanDraftNode {
         String ragContext = hasText(state.getRagContext())
                 ? state.getRagContext()
                 : "私有知识库暂无可用上下文。";
+        String ragTrace = hasText(state.getRagTraceSummary())
+                ? state.getRagTraceSummary()
+                : "未启用 Adaptive RAG trace。";
         String branchDispatchContext = formatBranchDispatchIssues(state.getBranchDispatchIssues());
         String branchContext = formatBranchResults(state.getBranchResults());
         String requirementContext = formatRequirementSpec(state.getRequirementSpec());
@@ -197,6 +200,9 @@ public class PlanDraftNode {
                 RAG 上下文：
                 %s
 
+                RAG 检索轨迹：
+                %s
+
                 分支派发记录：
                 %s
 
@@ -222,6 +228,7 @@ public class PlanDraftNode {
                 duration,
                 keywords,
                 ragContext,
+                ragTrace,
                 branchDispatchContext,
                 branchContext
         );
